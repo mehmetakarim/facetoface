@@ -1,0 +1,69 @@
+name: Windows test release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install engine dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          python -m pip install -r packaging/requirements-windows.txt
+      - name: Test engine
+        shell: pwsh
+        run: |
+          $env:DLC_RUN_INFERENCE_TESTS = '1'
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build portable engine
+        run: python packaging/build_worker.py
+      - name: Verify packaged engine
+        shell: pwsh
+        run: |
+          '{"mode":"diagnostics","check_inference":true}' | & dist/engine-worker/engine-worker.exe | Tee-Object -FilePath diagnostics.jsonl
+          if ($LASTEXITCODE) { throw 'Packaged engine failed' }
+          $events = Get-Content diagnostics.jsonl | ForEach-Object { $_ | ConvertFrom-Json }
+          $diagnostics = $events | Where-Object type -eq diagnostics
+          if (-not $diagnostics.ffmpeg -or -not ($diagnostics.providers -contains 'CPUExecutionProvider')) { throw 'Missing runtime components' }
+          if (-not ($events | Where-Object type -eq finished)) { throw 'Missing completion event' }
+      - name: Build desktop
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run tauri -- build --no-bundle
+      - name: Package
+        shell: pwsh
+        run: |
+          $kit = 'release-build/Yuz-Atolyesi-Windows-x64'
+          New-Item -ItemType Directory -Force "$kit/models/buffalo_l"
+          Copy-Item desktop/src-tauri/target/release/yuz-atolyesi.exe "$kit/Yuz-Atolyesi.exe"
+          Copy-Item dist/engine-worker "$kit/engine-worker" -Recurse
+          Copy-Item docs/WINDOWS.md "$kit/ONCE-OKUYUN.md"
+          Copy-Item LICENSE "$kit/LICENSE"
+          Copy-Item docs/THIRD_PARTY.md "$kit/THIRD_PARTY.md"
+          Copy-Item diagnostics.jsonl "$kit/BUILD-DIAGNOSTICS.jsonl"
+          Compress-Archive -Path $kit -DestinationPath release-build/Yuz-Atolyesi-Windows-x64.zip
+          (Get-FileHash release-build/Yuz-Atolyesi-Windows-x64.zip -Algorithm SHA256).Hash + '  Yuz-Atolyesi-Windows-x64.zip' | Out-File release-build/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yuz-Atolyesi-Windows-x64
+          path: release-build/*.*
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload ${{ github.ref_name }} release-build/Yuz-Atolyesi-Windows-x64.zip release-build/SHA256SUMS.txt --clobber
