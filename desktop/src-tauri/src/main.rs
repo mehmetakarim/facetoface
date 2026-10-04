@@ -376,6 +376,29 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)]
+    fn cancellation_stops_windows_worker() {
+        let child = Command::new("cmd.exe")
+            .args(["/C", "ping -n 60 127.0.0.1 >NUL"])
+            .creation_flags(0x08000000)
+            .spawn()
+            .unwrap();
+        let mut job = Job {
+            id: "test".into(),
+            child,
+            last: Instant::now(),
+            deadline: Duration::from_secs(150),
+            dir: PathBuf::new(),
+            terminal: false,
+            reader_done: false,
+        };
+        let started = Instant::now();
+        terminate(&mut job);
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(!job.child.try_wait().unwrap().unwrap().success());
+    }
+
+    #[test]
     #[cfg(unix)]
     fn cancellation_kills_a_nonresponsive_worker() {
         let child = Command::new("/bin/sleep")

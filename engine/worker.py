@@ -25,6 +25,7 @@ if os.environ.get('DLC_DEBUG_STACKS') == '1':
     faulthandler.dump_traceback_later(45, repeat=True, file=sys.stderr)
 
 ROOT = Path(os.environ.get('DLC_PROJECT_ROOT', Path(__file__).resolve().parents[1]))
+SUBPROCESS_FLAGS = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
 STARTED_AT = time.monotonic()
 sys.path.insert(0, str(ROOT))
 from engine.protocol import validate, encode
@@ -191,7 +192,7 @@ def run(config):
                     temp_dir = tempfile.TemporaryDirectory(prefix='yuz-atolyesi-', dir=os.environ.get('DLC_JOB_DIR'))
                     video_path = Path(temp_dir.name) / 'silent.mp4'
                     h, w = frame.shape[:2]
-                    encoder = subprocess.Popen([ffmpeg, '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps), '-i', '-', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', str(video_path)], stdin=subprocess.PIPE)
+                    encoder = subprocess.Popen([ffmpeg, '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps), '-i', '-', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', str(video_path)], stdin=subprocess.PIPE, **SUBPROCESS_FLAGS)
                 encoder.stdin.write(frame.tobytes())
             preview(frame, fps=round(frames / max(0.01, time.monotonic() - start), 1), progress=min(99, round(frames / total * 100, 1)) if total else None, faces=count)
         if not frames:
@@ -202,7 +203,7 @@ def run(config):
             if encoder.wait(timeout=90) != 0:
                 raise ValueError('Video kodlanamadı. Diskte yeterli boş alan olduğundan emin olun.')
             merged_path = Path(temp_dir.name) / 'result.mp4'
-            completed = subprocess.run([ffmpeg, '-v', 'error', '-n', '-i', str(video_path), '-i', config['target'], '-map', '0:v:0', '-map', '1:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-movflags', '+faststart', str(merged_path)], timeout=120)
+            completed = subprocess.run([ffmpeg, '-v', 'error', '-n', '-i', str(video_path), '-i', config['target'], '-map', '0:v:0', '-map', '1:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-movflags', '+faststart', str(merged_path)], timeout=120, **SUBPROCESS_FLAGS)
             if completed.returncode:
                 raise ValueError('Video kaydedilemedi. Kaynak dosyayı ve disk alanını kontrol edin.')
             publish(config['output'], source=merged_path)

@@ -45,6 +45,8 @@ jobs:
         run: |
           npm ci
           npm run tauri -- build --no-bundle
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --manifest-path src-tauri/Cargo.toml
       - name: Package
         shell: pwsh
         run: |
