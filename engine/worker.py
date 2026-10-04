@@ -91,7 +91,7 @@ def run(config):
         bboxes, keypoints = detector.detect(frame, max_num=0, metric='default')
         return [Face(bbox=box[:4], kps=keypoints[i], det_score=box[4])
                 for i, box in enumerate(bboxes)]
-    source_image = cv2.imread(config['source'])
+    source_image = cv2.imdecode(np.fromfile(config['source'], dtype=np.uint8), cv2.IMREAD_COLOR)
     if source_image is None:
         raise ValueError('Fotoğraf okunamadı. PNG veya JPEG biçiminde başka bir dosya seçin.')
     faces = detect(source_image)
@@ -140,7 +140,7 @@ def run(config):
 
     mode = config['mode']
     if mode == 'image':
-        frame = cv2.imread(config['target'])
+        frame = cv2.imdecode(np.fromfile(config['target'], dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError('Hedef fotoğraf okunamadı.')
         frame, count = transform(frame)
