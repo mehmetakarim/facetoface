@@ -12,7 +12,7 @@ npm install
 DEVELOPER_DIR=/Library/Developer/CommandLineTools npm run tauri dev
 ```
 
-`npm run dev` yalnızca tarayıcıdaki arayüz önizlemesini açar. Bu mod dosya seçimini gösterir; motor çalıştırmaz. `npm run build` TypeScript denetimini ve ön yüz derlemesini yapar. `DEVELOPER_DIR=/Library/Developer/CommandLineTools npm run tauri -- build --debug --bundles app` yerel macOS uygulamasını oluşturur. Proje kökündeki `Yuz-Atolyesi.command` dosyası uygulamayı açar. Bu sürüm kurulu Python ortamını kullanır; başka bilgisayarlara dağıtılabilir, bağımsız bir uygulama paketi değildir. Gerekirse `DLC_PROJECT_ROOT` ile proje konumu belirtilir.
+`npm run dev` yalnızca tarayıcıdaki arayüz önizlemesini açar. Bu mod dosya seçimini gösterir; motor çalıştırmaz. `npm run build` TypeScript denetimini ve ön yüz derlemesini yapar. `DEVELOPER_DIR=/Library/Developer/CommandLineTools npm run tauri -- build --debug --bundles app` yerel macOS uygulamasını oluşturur. Proje kökündeki `Yuz-Atolyesi.command` dosyası uygulamayı açar. Bu macOS geliştirme paketi kurulu Python ortamını kullanır; başka bilgisayarlara dağıtılabilir, bağımsız bir uygulama paketi değildir. Gerekirse `DLC_PROJECT_ROOT` ile proje konumu belirtilir.
 
 ## Mimari ve hata sınırları
 
@@ -51,3 +51,7 @@ Xcode lisans durumundan bağımsız olarak, makinede zaten kurulu olan Command L
 - Gerçek video testi: 3 kare, 636 × 364 çıktı boyutu ve ses akışı doğrulandı. Örnek video testi soğuk başlangıçla yaklaşık 108 saniye sürdü; bu bir gerçek zamanlı performans iddiası değildir.
 - Tauri macOS uygulama paketi oluşturuldu ve yerel pencerenin açıldığı doğrulandı.
 - Canlı kameranın donanım/izin davranışı ve CoreML başarımı henüz uçtan uca doğrulanmadı.
+
+## Windows dağıtımı
+
+Windows x64 paketi ayrı GitHub Actions iş akışıyla oluşturulur ve Python motorunu içerir. [Kurulum ve modeller](../docs/WINDOWS.md), [test planı](../docs/DURUM-VE-YOL-HARITASI.md).

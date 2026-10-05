@@ -66,6 +66,8 @@ def run(config):
         if config.get('check_inference'):
             from engine.inference import load_inference
             load_inference()
+            if ffmpeg:
+                subprocess.run([ffmpeg, '-version'], check=True, capture_output=True, timeout=15, **SUBPROCESS_FLAGS)
         emit('diagnostics', python=sys.version.split()[0], providers=ort.get_available_providers(),
              swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']), ffmpeg=bool(ffmpeg))
         return

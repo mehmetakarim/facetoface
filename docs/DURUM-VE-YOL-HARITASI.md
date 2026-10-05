@@ -9,7 +9,7 @@ Windows için taşınabilir uygulama yolu, paketli Python motoru, FFmpeg bulma v
 ## Test kanıtları ve sınırları
 
 - Kullanıcı, macOS/M1 ve kısıtlı kaynaklarda uygulamayı deneyerek başarılı sonuç aldığını bildirdi.
-- macOS'ta 11 Python testi ve Rust motor iptal testi geçti.
+- macOS'ta 12 Python testi ve Rust motor iptal testi geçti.
 - Fotoğraf işlemi gerçek arayüzde tamamlandı.
 - Otomatik kısa video testinde 3 kare, 636×364 boyut ve ses akışı doğrulandı. Soğuk başlangıç dahil yaklaşık 108 saniye sürdü. Bu sonuç gerçek zamanlı performans iddiası değildir.
 - Windows derleme ve paketli motor kontrollerinin güncel sonucu deponun Actions sekmesinden görülebilir. Bu kontroller gerçek kamera, model ağırlıklarıyla görüntü işleme veya farklı Windows donanımlarında kullanıcı testi yerine geçmez.
