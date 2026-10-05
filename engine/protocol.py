@@ -19,6 +19,8 @@ def validate(config):
         raise ValueError('Geçersiz işlem sağlayıcısı.')
     if type(config.get('occlusion', True)) is not bool:
         raise ValueError('Geçersiz el ve nesne koruması ayarı.')
+    if type(config.get('virtual_camera', False)) is not bool:
+        raise ValueError('Geçersiz sanal kamera ayarı.')
     if mode == 'live':
         camera = config.get('camera', 0)
         if type(camera) is not int or not 0 <= camera <= 9:

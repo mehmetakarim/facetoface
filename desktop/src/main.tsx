@@ -40,6 +40,7 @@ type EngineEvent = {
   swap_model?: boolean;
   analysis_models?: boolean;
   occlusion_model?: boolean;
+  virtual_camera?: boolean;
   cameras?: { index: number; name: string }[];
   ffmpeg?: boolean;
 };
@@ -95,6 +96,7 @@ function App() {
   useEffect(() => remember("provider", provider), [provider]);
   useEffect(() => remember("occlusion", occlusion ? "on" : "off"), [occlusion]);
   const [camera, setCamera] = useState(0);
+  const [virtualCamera, setVirtualCamera] = useState(false);
   const [cameras, setCameras] = useState<{ index: number; name: string }[]>();
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
@@ -397,6 +399,7 @@ function App() {
       many_faces: many,
       mirror,
       occlusion,
+      virtual_camera: mode === "live" && virtualCamera,
       camera,
     });
   }
@@ -621,6 +624,24 @@ function App() {
                   >
                     <RefreshCw size={14} /> Kameraları yenile
                   </button>
+                  {windows && (
+                    <label className="toggle-row">
+                      <span>
+                        Sanal kameraya gönder
+                        <small>
+                          Tarayıcıda (Meet vb.), Zoom, Discord veya OBS'te “OBS
+                          Virtual Camera”yı seçin. OBS Studio kurulu olmalıdır.
+                          WhatsApp ve Microsoft Store uygulamalarında görünmez.
+                        </small>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={virtualCamera}
+                        disabled={busy}
+                        onChange={(e) => setVirtualCamera(e.target.checked)}
+                      />
+                    </label>
+                  )}
                   <p className="small-note">
                     {cameras?.length
                       ? "Yeni bir kamera taktıysanız listeyi yenileyin. Kamera erişimi yalnızca başlattığınızda istenir."
@@ -761,6 +782,9 @@ function App() {
                       Video araçları: {diagnostics.ffmpeg ? "hazır" : "eksik"}
                       {windows && (
                         <>
+                          <br />
+                          Sanal kamera (OBS):{" "}
+                          {diagnostics.virtual_camera ? "hazır" : "kurulu değil"}
                           <br />
                           Ekran kartı hızlandırması:{" "}
                           {diagnostics.providers?.includes("DmlExecutionProvider")

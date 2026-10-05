@@ -26,8 +26,7 @@ with tempfile.TemporaryDirectory(prefix='yuz paket testi ') as directory:
     assert events[-1]['type'] == 'finished', events
     Path('diagnostics.jsonl').write_bytes(result.stdout)
     # Camera names must load without the checkout; CI runners have no cameras.
-    listed = subprocess.run([str(worker)], cwd=directory, env=env, input=b'{"mode":"cameras"}
-',
+    listed = subprocess.run([str(worker)], cwd=directory, env=env, input=b'{"mode":"cameras"}\n',
                             capture_output=True, timeout=60)
     if listed.returncode:
         raise RuntimeError(listed.stderr.decode('utf-8', errors='replace'))

@@ -100,6 +100,9 @@ def list_cameras():
         from cv2_enumerate_cameras import enumerate_cameras
         seen = {}
         for info in enumerate_cameras(camera_api(cv2)):
+            # Our own output; picking it as input would feed the result back in.
+            if info.name == 'OBS Virtual Camera':
+                continue
             seen[info.name] = seen.get(info.name, 0) + 1
             name = info.name if seen[info.name] == 1 else f'{info.name} ({seen[info.name]})'
             cameras.append({'index': info.index, 'name': name})
@@ -110,6 +113,10 @@ def run(config):
     if config['mode'] == 'cameras':
         list_cameras()
         return
+    if config['mode'] == 'live' and config.get('virtual_camera'):
+        from engine.virtualcam import installed as virtualcam_installed
+        if not virtualcam_installed():
+            raise ValueError('Sanal kamera için OBS Studio kurulmalıdır. OBS kurulduktan sonra yeniden deneyin.')
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
     import numpy as np
@@ -128,6 +135,7 @@ def run(config):
         except (ImportError, RuntimeError):
             ffmpeg = None
     if config['mode'] == 'diagnostics':
+        from engine.virtualcam import installed as virtualcam_installed
         if config.get('check_inference'):
             from engine.inference import load_inference
             load_inference()
@@ -135,7 +143,7 @@ def run(config):
                 subprocess.run([ffmpeg, '-version'], check=True, capture_output=True, timeout=15, **SUBPROCESS_FLAGS)
         emit('diagnostics', python=sys.version.split()[0], providers=ort.get_available_providers(),
              swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']),
-             occlusion_model=occlusion_path.is_file(), ffmpeg=bool(ffmpeg))
+             occlusion_model=occlusion_path.is_file(), virtual_camera=virtualcam_installed(), ffmpeg=bool(ffmpeg))
         return
     if not all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']):
         raise ValueError('Yüz algılama modelleri eksik. det_10g.onnx ve w600k_r50.onnx dosyalarını models/buffalo_l klasörüne yerleştirin.')
@@ -261,6 +269,7 @@ def run(config):
     cap = cv2.VideoCapture(config.get('camera', 0), camera_api(cv2)) if mode == 'live' else cv2.VideoCapture(config['target'])
     encoder = None
     temp_dir = None
+    virtual_camera = None
     try:
         if not cap.isOpened():
             raise ValueError('Kamera açılamadı. Kamera numarasını ve kamera izinlerini kontrol edin.' if mode == 'live' else 'Video açılamadı. Dosya biçimini kontrol edin.')
@@ -289,6 +298,13 @@ def run(config):
                 frame = cv2.flip(frame, 1)
             frame, count = transform(frame)
             frames += 1
+            if mode == 'live' and config.get('virtual_camera'):
+                if virtual_camera is None:
+                    from engine.virtualcam import VirtualCamera
+                    virtual_camera = VirtualCamera(frame.shape[1], frame.shape[0])
+                    phase('Sanal kamera açık. Görüntülü görüşmede "OBS Virtual Camera" seçin.')
+                # Meeting apps mirror their own self-view; others must see the true image.
+                virtual_camera.send(cv2.flip(frame, 1) if config.get('mirror', True) else frame)
             if mode == 'video':
                 if encoder is None:
                     # Same-volume temporary output; removed even when the process is killed by supervisor.
@@ -313,6 +329,8 @@ def run(config):
             emit('complete', output=config['output'], message='Video kaydedildi.')
     finally:
         cap.release()
+        if virtual_camera is not None:
+            virtual_camera.close()
         if encoder is not None and encoder.poll() is None:
             encoder.kill()
             encoder.wait()
