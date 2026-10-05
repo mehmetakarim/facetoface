@@ -146,6 +146,9 @@ function App() {
         else {
           off = fn;
           subscriptionReady.current = true;
+          // A reloaded page cannot track a job started by its previous
+          // instance; stop it so the camera is released and new jobs can start.
+          invoke("stop_job").catch(() => undefined);
         }
       })
       .catch(() =>
