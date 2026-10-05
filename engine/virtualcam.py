@@ -154,6 +154,19 @@ def helper_path():
     return None
 
 
+def native_available():
+    """Windows 11 and the camera files ship with this build, installed or not."""
+    if sys.platform != 'win32' or sys.getwindowsversion().build < 22000:
+        return False
+    helper = helper_path()
+    return bool(helper) and (helper.parent / 'YuzAtolyesiKamera.dll').is_file()
+
+
+def status():
+    return {'native_available': native_available(), 'native_camera': native_installed(),
+            'obs_camera': installed()}
+
+
 def native_installed():
     """Windows 11 with our media source registered machine-wide and the helper present."""
     if sys.platform != 'win32' or sys.getwindowsversion().build < 22000 or not helper_path():

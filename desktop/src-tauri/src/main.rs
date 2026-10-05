@@ -88,6 +88,60 @@ fn environment() -> Value {
     let root = root();
     json!({"python":runtime(&root).0.exists(),"swap_model":root.join("models/inswapper_128.onnx").exists(),"root":root,"version":"0.1.0"})
 }
+/// PowerShell's -EncodedCommand takes UTF-16LE Base64: no quoting, whatever the path.
+#[cfg(windows)]
+fn encoded(script: &str) -> String {
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    STANDARD.encode(bytes)
+}
+#[cfg(windows)]
+fn run_vcam_setup(script: PathBuf, action: &str) -> Result<(), String> {
+    let inner = format!(
+        "& '{}' -Action {}; exit $LASTEXITCODE",
+        script.to_string_lossy().replace('\'', "''"),
+        action
+    );
+    // Start-Process -Verb RunAs shows the UAC prompt; declining it throws (1223).
+    let outer = format!(
+        "try {{ $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden \
+         -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','{}'; exit $p.ExitCode }} \
+         catch {{ exit 1223 }}",
+        encoded(&inner)
+    );
+    let status = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"])
+        .arg(encoded(&outer))
+        .creation_flags(0x08000000)
+        .status()
+        .map_err(|_| "Kurulum başlatılamadı.")?;
+    match status.code() {
+        Some(0) => Ok(()),
+        Some(1223) => Err("Yönetici izni verilmediği için işlem yapılmadı.".into()),
+        Some(3) => Err("Sanal kamera dosyaları uygulama klasöründe bulunamadı.".into()),
+        Some(4) => Err("Sanal kamera Windows'a kaydedilemedi.".into()),
+        code => Err(format!("Sanal kamera işlemi tamamlanamadı ({}).", code.unwrap_or(-1))),
+    }
+}
+/// Installs or removes the Windows 11 virtual camera (needs administrator approval).
+#[tauri::command]
+async fn vcam_setup(action: String) -> Result<(), String> {
+    if action != "install" && action != "uninstall" {
+        return Err("Geçersiz işlem.".into());
+    }
+    #[cfg(windows)]
+    {
+        let root = root();
+        let script = [root.join("vcam/setup.ps1"), root.join("native/vcam/setup.ps1")]
+            .into_iter()
+            .find(|p| p.is_file())
+            .ok_or("Sanal kamera kurulum dosyası bulunamadı.")?;
+        tauri::async_runtime::spawn_blocking(move || run_vcam_setup(script, &action))
+            .await
+            .map_err(|_| "Kurulum yarıda kaldı.")?
+    }
+    #[cfg(not(windows))]
+    Err("Yüz Atölyesi Kamera yalnızca Windows 11'de kullanılabilir.".into())
+}
 #[tauri::command]
 async fn image_data(path: String) -> Result<String, String> {
     let path = PathBuf::from(path);
@@ -345,7 +399,8 @@ fn main() {
             environment,
             image_data,
             start_job,
-            stop_job
+            stop_job,
+            vcam_setup
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

@@ -42,6 +42,9 @@ type EngineEvent = {
   occlusion_model?: boolean;
   virtual_camera?: boolean;
   cameras?: { index: number; name: string }[];
+  native_available?: boolean;
+  native_camera?: boolean;
+  obs_camera?: boolean;
   ffmpeg?: boolean;
 };
 const native = isTauri();
@@ -97,6 +100,12 @@ function App() {
   useEffect(() => remember("occlusion", occlusion ? "on" : "off"), [occlusion]);
   const [camera, setCamera] = useState(0);
   const [virtualCamera, setVirtualCamera] = useState(false);
+  const [vcam, setVcam] = useState<{
+    native_available?: boolean;
+    native_camera?: boolean;
+    obs_camera?: boolean;
+  }>();
+  const [settingUp, setSettingUp] = useState(false);
   const [cameras, setCameras] = useState<{ index: number; name: string }[]>();
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
@@ -142,6 +151,11 @@ function App() {
       if (e.type === "cameras") {
         const list = e.cameras || [];
         setCameras(list);
+        setVcam({
+          native_available: e.native_available,
+          native_camera: e.native_camera,
+          obs_camera: e.obs_camera,
+        });
         setCamera((current) =>
           list.length && !list.some((c) => c.index === current)
             ? list[0].index
@@ -403,6 +417,28 @@ function App() {
       camera,
     });
   }
+  async function setupVcam(action: "install" | "uninstall") {
+    setSettingUp(true);
+    setError("");
+    setMessage(
+      action === "install"
+        ? "Yönetici izni isteniyor; Windows'un açtığı pencereyi onaylayın…"
+        : "Yüz Atölyesi Kamera kaldırılıyor…",
+    );
+    try {
+      await invoke("vcam_setup", { action });
+      setMessage(
+        action === "install"
+          ? "Yüz Atölyesi Kamera kuruldu."
+          : "Yüz Atölyesi Kamera kaldırıldı.",
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSettingUp(false);
+      launch({ mode: "cameras" });
+    }
+  }
   async function stop() {
     try {
       await invoke("stop_job");
@@ -629,9 +665,16 @@ function App() {
                       <span>
                         Sanal kameraya gönder
                         <small>
-                          Tarayıcıda (Meet vb.), Zoom, Discord veya OBS'te “OBS
-                          Virtual Camera”yı seçin. OBS Studio kurulu olmalıdır.
-                          WhatsApp ve Microsoft Store uygulamalarında görünmez.
+                          {vcam?.native_camera
+                            ? "WhatsApp, Teams, Zoom, Meet ve diğer uygulamalarda “Yüz Atölyesi Kamera”yı seçin. Kamera, canlı görüntü başlayınca listede görünür."
+                            : vcam?.native_available
+                              ? "Tüm uygulamalarda görünmesi için Yüz Atölyesi Kamera'yı bir kez kurun." +
+                                (vcam.obs_camera
+                                  ? " Kurulana kadar “OBS Virtual Camera” kullanılır (WhatsApp'ta görünmez)."
+                                  : "")
+                              : vcam?.obs_camera
+                                ? "Tarayıcıda (Meet vb.), Zoom, Discord veya OBS'te “OBS Virtual Camera”yı seçin. WhatsApp ve Microsoft Store uygulamalarında görünmez."
+                                : "Sanal kamera için OBS Studio'yu kurun (Windows 11'de Yüz Atölyesi Kamera da kullanılabilir)."}
                         </small>
                       </span>
                       <input
@@ -641,6 +684,24 @@ function App() {
                         onChange={(e) => setVirtualCamera(e.target.checked)}
                       />
                     </label>
+                  )}
+                  {windows && vcam?.native_available && (
+                    <button
+                      className="text-button"
+                      disabled={busy || settingUp || !native}
+                      onClick={() =>
+                        setupVcam(vcam.native_camera ? "uninstall" : "install")
+                      }
+                    >
+                      {settingUp ? (
+                        <LoaderCircle size={14} className="spin" />
+                      ) : (
+                        <Camera size={14} />
+                      )}{" "}
+                      {vcam.native_camera
+                        ? "Yüz Atölyesi Kamera'yı kaldır"
+                        : "Yüz Atölyesi Kamera'yı kur (yönetici izni ister)"}
+                    </button>
                   )}
                   <p className="small-note">
                     {cameras?.length

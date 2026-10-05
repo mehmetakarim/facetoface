@@ -106,7 +106,8 @@ def list_cameras():
             seen[info.name] = seen.get(info.name, 0) + 1
             name = info.name if seen[info.name] == 1 else f'{info.name} ({seen[info.name]})'
             cameras.append({'index': info.index, 'name': name})
-    emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9])
+    from engine.virtualcam import status
+    emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9], **status())
 
 
 def run(config):
