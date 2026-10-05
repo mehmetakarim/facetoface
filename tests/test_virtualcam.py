@@ -35,6 +35,18 @@ class VirtualCameraQueueTests(unittest.TestCase):
         camera.close()
         self.assertEqual(virtualcam.HEADER.unpack_from(reader, 0)[2], virtualcam.STATE_STOPPING)
 
+    def test_frames_are_stamped_with_the_performance_counter(self):
+        # native/vcam/source/SharedFrames.cpp drops frames whose QPC stamp is stale.
+        import struct
+        import time
+        with mock.patch.object(virtualcam, 'installed', return_value=True):
+            camera = virtualcam.VirtualCamera(64, 48)
+        self.addCleanup(camera.close)
+        before = time.perf_counter_ns()
+        camera.send(np.zeros((48, 64, 3), np.uint8))
+        stamp = struct.unpack_from('<Q', camera.queue.memory, camera.offsets[1])[0]
+        self.assertTrue(before <= stamp <= time.perf_counter_ns())
+
     def test_header_matches_obs_c_struct(self):
         # struct queue_header: the uint64 interval sits at offset 40 after MSVC padding.
         self.assertEqual(virtualcam.HEADER.size, 80)

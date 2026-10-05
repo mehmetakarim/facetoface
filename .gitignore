@@ -41,3 +41,10 @@ dist/
 *.spec
 *.zip
 mypi.ini
+
+# Windows 11 virtual camera build
+native/vcam/packages/
+native/vcam/bin/
+native/vcam/helper/obj/
+native/vcam/source/VCamSampleSource/
+native/vcam/source/*.user

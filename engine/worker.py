@@ -114,9 +114,9 @@ def run(config):
         list_cameras()
         return
     if config['mode'] == 'live' and config.get('virtual_camera'):
-        from engine.virtualcam import installed as virtualcam_installed
-        if not virtualcam_installed():
-            raise ValueError('Sanal kamera için OBS Studio kurulmalıdır. OBS kurulduktan sonra yeniden deneyin.')
+        from engine.virtualcam import installed as obs_installed, native_installed
+        if not (native_installed() or obs_installed()):
+            raise ValueError('Sanal kamera kurulu değil. Ayarlardan Yüz Atölyesi Kamera’yı kurun veya OBS Studio’yu yükleyin.')
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
     import numpy as np
@@ -135,7 +135,7 @@ def run(config):
         except (ImportError, RuntimeError):
             ffmpeg = None
     if config['mode'] == 'diagnostics':
-        from engine.virtualcam import installed as virtualcam_installed
+        from engine.virtualcam import installed as virtualcam_installed, native_installed
         if config.get('check_inference'):
             from engine.inference import load_inference
             load_inference()
@@ -143,7 +143,7 @@ def run(config):
                 subprocess.run([ffmpeg, '-version'], check=True, capture_output=True, timeout=15, **SUBPROCESS_FLAGS)
         emit('diagnostics', python=sys.version.split()[0], providers=ort.get_available_providers(),
              swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']),
-             occlusion_model=occlusion_path.is_file(), virtual_camera=virtualcam_installed(), ffmpeg=bool(ffmpeg))
+             occlusion_model=occlusion_path.is_file(), virtual_camera=virtualcam_installed(), native_camera=native_installed(), ffmpeg=bool(ffmpeg))
         return
     if not all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']):
         raise ValueError('Yüz algılama modelleri eksik. det_10g.onnx ve w600k_r50.onnx dosyalarını models/buffalo_l klasörüne yerleştirin.')
@@ -300,9 +300,9 @@ def run(config):
             frames += 1
             if mode == 'live' and config.get('virtual_camera'):
                 if virtual_camera is None:
-                    from engine.virtualcam import VirtualCamera
-                    virtual_camera = VirtualCamera(frame.shape[1], frame.shape[0])
-                    phase('Sanal kamera açık. Görüntülü görüşmede "OBS Virtual Camera" seçin.')
+                    from engine.virtualcam import open_camera
+                    virtual_camera = open_camera(frame.shape[1], frame.shape[0])
+                    phase(f'Sanal kamera açık. Görüntülü görüşmede "{virtual_camera.name}" kamerasını seçin.')
                 # Meeting apps mirror their own self-view; others must see the true image.
                 virtual_camera.send(cv2.flip(frame, 1) if config.get('mirror', True) else frame)
             if mode == 'video':
