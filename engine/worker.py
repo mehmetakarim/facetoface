@@ -32,7 +32,7 @@ from engine.protocol import validate, encode
 from engine.output import publish
 
 # Keep an independent descriptor so C/C++ logs cannot corrupt JSON messages.
-PROTOCOL = os.fdopen(os.dup(sys.stdout.fileno()), 'w', buffering=1)
+PROTOCOL = os.fdopen(os.dup(sys.stdout.fileno()), 'w', buffering=1, encoding='utf-8', newline='\n')
 os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
 
 
@@ -219,7 +219,7 @@ def run(config):
 
 if __name__ == '__main__':
     try:
-        raw = sys.stdin.readline(1024 * 1024)
+        raw = sys.stdin.buffer.readline(1024 * 1024).decode('utf-8')
         config = validate(json.loads(raw))
         run(config)
         emit('finished')
