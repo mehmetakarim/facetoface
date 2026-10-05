@@ -8,9 +8,9 @@ VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm'}
 
 def validate(config):
     mode = config.get('mode')
-    if mode not in {'diagnostics', 'source', 'image', 'video', 'live'}:
+    if mode not in {'diagnostics', 'cameras', 'source', 'image', 'video', 'live'}:
         raise ValueError('Geçersiz çalışma modu.')
-    if mode == 'diagnostics':
+    if mode in {'diagnostics', 'cameras'}:
         return config
     source = Path(config.get('source') or '')
     if not source.is_file() or source.suffix.lower() not in IMAGE_EXTENSIONS:

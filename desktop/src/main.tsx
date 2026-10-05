@@ -40,6 +40,7 @@ type EngineEvent = {
   swap_model?: boolean;
   analysis_models?: boolean;
   occlusion_model?: boolean;
+  cameras?: { index: number; name: string }[];
   ffmpeg?: boolean;
 };
 const native = isTauri();
@@ -94,6 +95,7 @@ function App() {
   useEffect(() => remember("provider", provider), [provider]);
   useEffect(() => remember("occlusion", occlusion ? "on" : "off"), [occlusion]);
   const [camera, setCamera] = useState(0);
+  const [cameras, setCameras] = useState<{ index: number; name: string }[]>();
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
   const [original, setOriginal] = useState(false);
@@ -134,6 +136,20 @@ function App() {
         // Without a usable GPU, fall back instead of failing every job.
         if (!e.providers?.includes("DmlExecutionProvider"))
           setProvider((p) => (p === "directml" ? "cpu" : p));
+      }
+      if (e.type === "cameras") {
+        const list = e.cameras || [];
+        setCameras(list);
+        setCamera((current) =>
+          list.length && !list.some((c) => c.index === current)
+            ? list[0].index
+            : current,
+        );
+        setMessage(
+          list.length
+            ? `${list.length} kamera bulundu.`
+            : "Kamera bulunamadı. Numarayla seçmeyi deneyin.",
+        );
       }
       if (e.type === "error") setError(e.message || "İşlem tamamlanamadı.");
       if (["exit", "stopped"].includes(e.type)) {
@@ -206,6 +222,16 @@ function App() {
     };
   }, [help]);
 
+  useEffect(() => {
+    if (mode !== "live" || cameras || !native) return;
+    const timer = setInterval(() => {
+      if (subscriptionReady.current && !busyRef.current) {
+        clearInterval(timer);
+        launch({ mode: "cameras" });
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [mode, cameras]);
   async function launch(config: Record<string, unknown>, check = false) {
     if (busyRef.current) return;
     if (!native) {
@@ -227,7 +253,13 @@ function App() {
     setError("");
     setElapsed(0);
     started.current = Date.now();
-    setMessage(check ? "Kaynak fotoğraf inceleniyor…" : "Motor hazırlanıyor…");
+    setMessage(
+      check
+        ? "Kaynak fotoğraf inceleniyor…"
+        : config.mode === "cameras"
+          ? "Kameralar aranıyor…"
+          : "Motor hazırlanıyor…",
+    );
     try {
       await invoke("start_job", { config, jobId: job.current });
     } catch (e) {
@@ -561,7 +593,7 @@ function App() {
               {mode === "live" ? (
                 <>
                   <label className="select-label" htmlFor="camera">
-                    Kamera numarası
+                    Kamera
                   </label>
                   <select
                     id="camera"
@@ -569,16 +601,30 @@ function App() {
                     value={camera}
                     onChange={(e) => setCamera(Number(e.target.value))}
                   >
-                    {[0, 1, 2, 3].map((n) => (
-                      <option value={n} key={n}>
-                        Kamera {n}
-                        {n === 0 ? " · Varsayılan" : ""}
-                      </option>
-                    ))}
+                    {cameras?.length
+                      ? cameras.map((c) => (
+                          <option value={c.index} key={c.index}>
+                            {c.name}
+                          </option>
+                        ))
+                      : [0, 1, 2, 3].map((n) => (
+                          <option value={n} key={n}>
+                            Kamera {n}
+                            {n === 0 ? " · Varsayılan" : ""}
+                          </option>
+                        ))}
                   </select>
+                  <button
+                    className="text-button"
+                    disabled={busy || !native}
+                    onClick={() => launch({ mode: "cameras" })}
+                  >
+                    <RefreshCw size={14} /> Kameraları yenile
+                  </button>
                   <p className="small-note">
-                    Görüntü gelmezse başka bir numara deneyin. Kamera erişimi
-                    yalnızca başlattığınızda istenir.
+                    {cameras?.length
+                      ? "Yeni bir kamera taktıysanız listeyi yenileyin. Kamera erişimi yalnızca başlattığınızda istenir."
+                      : "Görüntü gelmezse başka bir numara deneyin. Kamera erişimi yalnızca başlattığınızda istenir."}
                   </p>
                 </>
               ) : (

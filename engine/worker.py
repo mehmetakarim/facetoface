@@ -83,7 +83,33 @@ class LatestFrameReader:
         self.cap.release()
 
 
+def camera_api(cv2):
+    # This OpenCV build cannot open devices through Media Foundation, and CAP_ANY
+    # falls back to DirectShow anyway. Using it explicitly keeps the listed order
+    # and the opened index identical.
+    if sys.platform == 'darwin':
+        return cv2.CAP_AVFOUNDATION
+    return cv2.CAP_DSHOW if sys.platform == 'win32' else cv2.CAP_ANY
+
+
+def list_cameras():
+    """Device names without opening any camera, so no permission prompt appears."""
+    import cv2
+    cameras = []
+    if sys.platform == 'win32':
+        from cv2_enumerate_cameras import enumerate_cameras
+        seen = {}
+        for info in enumerate_cameras(camera_api(cv2)):
+            seen[info.name] = seen.get(info.name, 0) + 1
+            name = info.name if seen[info.name] == 1 else f'{info.name} ({seen[info.name]})'
+            cameras.append({'index': info.index, 'name': name})
+    emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9])
+
+
 def run(config):
+    if config['mode'] == 'cameras':
+        list_cameras()
+        return
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
     import numpy as np
@@ -232,7 +258,7 @@ def run(config):
 
     if mode == 'video' and not ffmpeg:
         raise ValueError('Video işlemek için FFmpeg kurulmalıdır.')
-    cap = cv2.VideoCapture(config.get('camera', 0), cv2.CAP_AVFOUNDATION if sys.platform == 'darwin' else cv2.CAP_ANY) if mode == 'live' else cv2.VideoCapture(config['target'])
+    cap = cv2.VideoCapture(config.get('camera', 0), camera_api(cv2)) if mode == 'live' else cv2.VideoCapture(config['target'])
     encoder = None
     temp_dir = None
     try:

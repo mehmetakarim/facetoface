@@ -45,6 +45,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(encoded.count('\n'), 1)
         self.assertEqual(json.loads(encoded), event)
     def test_missing_source_and_unknown_mode(self):
+        self.assertEqual(validate({'mode': 'cameras'}), {'mode': 'cameras'})
         for config in [{'mode':'unknown'}, {'mode':'source','source':'missing.jpg'}]:
             with self.assertRaises(ValueError): validate(config)
 
