@@ -45,6 +45,44 @@ def phase(message):
     emit('status', message=message)
 
 
+class LatestFrameReader:
+    """Reads a camera continuously and hands out only the newest frame."""
+
+    def __init__(self, cap):
+        import threading
+        self.cap = cap
+        self.frame = None
+        self.ok = True
+        self.fresh = threading.Condition()
+        self.running = True
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
+
+    def _loop(self):
+        while self.running:
+            ok, frame = self.cap.read()
+            with self.fresh:
+                self.ok, self.frame = ok, frame if ok else None
+                self.fresh.notify()
+            if not ok:
+                return
+
+    def read(self):
+        with self.fresh:
+            if self.frame is None and self.ok:
+                self.fresh.wait(timeout=5)
+            frame, self.frame = self.frame, None
+            return frame is not None, frame
+
+    def get(self, prop):
+        return self.cap.get(prop)
+
+    def release(self):
+        self.running = False
+        self.thread.join(timeout=2)
+        self.cap.release()
+
+
 def run(config):
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
@@ -52,6 +90,7 @@ def run(config):
     import onnxruntime as ort
 
     model_path = ROOT / 'models' / 'inswapper_128.onnx'
+    occlusion_path = ROOT / 'models' / 'xseg.onnx'
     analysis_dir = ROOT / 'models' / 'buffalo_l'
     if not analysis_dir.is_dir():
         analysis_dir = Path.home() / '.insightface' / 'models' / 'buffalo_l'
@@ -69,7 +108,8 @@ def run(config):
             if ffmpeg:
                 subprocess.run([ffmpeg, '-version'], check=True, capture_output=True, timeout=15, **SUBPROCESS_FLAGS)
         emit('diagnostics', python=sys.version.split()[0], providers=ort.get_available_providers(),
-             swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']), ffmpeg=bool(ffmpeg))
+             swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']),
+             occlusion_model=occlusion_path.is_file(), ffmpeg=bool(ffmpeg))
         return
     if not all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']):
         raise ValueError('Yüz algılama modelleri eksik. det_10g.onnx ve w600k_r50.onnx dosyalarını models/buffalo_l klasörüne yerleştirin.')
@@ -115,16 +155,47 @@ def run(config):
     provider = config.get('provider', 'cpu')
     if provider == 'coreml' and 'CoreMLExecutionProvider' not in ort.get_available_providers():
         raise ValueError('Bu bilgisayarda Apple hızlandırması kullanılamıyor. Standart işlem seçeneğini deneyin.')
-    phase('Yüz değiştirme modeli yükleniyor…' if provider == 'cpu' else 'Apple hızlandırması hazırlanıyor. İlk açılış biraz sürebilir…')
-    providers = ['CPUExecutionProvider'] if provider == 'cpu' else ['CoreMLExecutionProvider', 'CPUExecutionProvider']
-    swapper = get_model(str(model_path), providers=providers, sess_options=opts)
+    if provider == 'directml' and 'DmlExecutionProvider' not in ort.get_available_providers():
+        raise ValueError('Bu bilgisayarda ekran kartı hızlandırması kullanılamıyor. Standart işlem seçeneğini deneyin.')
+    phase({'cpu': 'Yüz değiştirme modeli yükleniyor…',
+           'coreml': 'Apple hızlandırması hazırlanıyor. İlk açılış biraz sürebilir…',
+           'directml': 'Ekran kartı hızlandırması hazırlanıyor…'}[provider])
+    swap_opts = opts
+    if provider == 'cpu':
+        providers = ['CPUExecutionProvider']
+    elif provider == 'coreml':
+        providers = ['CoreMLExecutionProvider', 'CPUExecutionProvider']
+    else:
+        # DirectML rejects memory patterns and parallel execution. The detector stays
+        # on CPU: det_10g's dynamic Reshape fails under DirectML 1.20.
+        swap_opts = ort.SessionOptions()
+        swap_opts.log_severity_level = 3
+        swap_opts.enable_mem_pattern = False
+        swap_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        # Prefer the discrete GPU on hybrid laptops instead of adapter 0.
+        providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance', 'device_filter': 'gpu'}),
+                     'CPUExecutionProvider']
+    swapper = get_model(str(model_path), providers=providers, sess_options=swap_opts)
+    from engine.blend import Blender, Occluder
+    occluder = None
+    if config.get('occlusion', True):
+        if occlusion_path.is_file():
+            phase('El ve nesne koruması hazırlanıyor…')
+            # XSeg is a TensorFlow export; keep it off CoreML, which is untested with it.
+            occluder = Occluder(ort.InferenceSession(str(occlusion_path), swap_opts,
+                                                     providers=providers if provider == 'directml' else ['CPUExecutionProvider']))
+        else:
+            phase('xseg.onnx bulunamadı; el ve nesne koruması olmadan devam ediliyor.')
+    blender = Blender(occluder)
     phase('İşlem başlıyor…')
     last_preview = 0.0
+    # Video previews are throttled to spare the encoder; live preview is the product.
+    preview_interval = 1 / 30 if config['mode'] == 'live' else 0.18
 
     def preview(frame, **data):
         nonlocal last_preview
         now = time.monotonic()
-        if now - last_preview < 0.18 and not data.get('final'):
+        if now - last_preview < preview_interval and not data.get('final'):
             return
         last_preview = now
         h, w = frame.shape[:2]
@@ -138,7 +209,8 @@ def run(config):
         found = detect(frame)
         selected = found if config.get('many_faces', False) else sorted(found, key=lambda f: f.bbox[0])[:1]
         for target_face in selected:
-            frame = swapper.get(frame, target_face, source, paste_back=True)
+            fake, M = swapper.get(frame, target_face, source, paste_back=False)
+            frame = blender.paste(frame, fake, M)
         return frame, len(selected)
 
     mode = config['mode']
@@ -170,6 +242,9 @@ def run(config):
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            # Drivers often ignore BUFFERSIZE; draining on a thread keeps processing
+            # on the newest frame instead of a growing backlog.
+            cap = LatestFrameReader(cap)
             phase('Kamera açık. Canlı görüntü işleniyor.')
         else:
             phase('Video işleniyor…')

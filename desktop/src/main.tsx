@@ -39,9 +39,27 @@ type EngineEvent = {
   providers?: string[];
   swap_model?: boolean;
   analysis_models?: boolean;
+  occlusion_model?: boolean;
   ffmpeg?: boolean;
 };
 const native = isTauri();
+const windows = navigator.userAgent.includes("Windows");
+// Remembered per device; storage may be unavailable, so every access is guarded.
+function stored<T extends string>(key: string, fallback: T, allowed: T[]): T {
+  try {
+    const value = localStorage.getItem(key) as T | null;
+    return value && allowed.includes(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function remember(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* Settings simply reset next time. */
+  }
+}
 const name = (path: string) => path.split(/[\\/]/).pop() || "";
 const labels = { image: "Fotoğraf", video: "Video", live: "Canlı kamera" };
 
@@ -61,9 +79,20 @@ function App() {
   const [error, setError] = useState("");
   const [fps, setFps] = useState<number>();
   const [progress, setProgress] = useState<number>();
-  const [provider, setProvider] = useState("cpu");
+  const [provider, setProvider] = useState(() =>
+    stored(
+      "provider",
+      windows ? "directml" : "cpu",
+      windows ? ["cpu", "directml"] : ["cpu", "coreml"],
+    ),
+  );
   const [many, setMany] = useState(false);
   const [mirror, setMirror] = useState(true);
+  const [occlusion, setOcclusion] = useState(
+    () => stored("occlusion", "on", ["on", "off"]) === "on",
+  );
+  useEffect(() => remember("provider", provider), [provider]);
+  useEffect(() => remember("occlusion", occlusion ? "on" : "off"), [occlusion]);
   const [camera, setCamera] = useState(0);
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
@@ -99,7 +128,12 @@ function App() {
         setOutput(e.output || "");
         setProgress(100);
       }
-      if (e.type === "diagnostics") setDiagnostics(e);
+      if (e.type === "diagnostics") {
+        setDiagnostics(e);
+        // Without a usable GPU, fall back instead of failing every job.
+        if (!e.providers?.includes("DmlExecutionProvider"))
+          setProvider((p) => (p === "directml" ? "cpu" : p));
+      }
       if (e.type === "error") setError(e.message || "İşlem tamamlanamadı.");
       if (["exit", "stopped"].includes(e.type)) {
         busyRef.current = false;
@@ -318,6 +352,7 @@ function App() {
       provider,
       many_faces: many,
       mirror,
+      occlusion,
       camera,
     });
   }
@@ -596,11 +631,18 @@ function App() {
                     onChange={(e) => setProvider(e.target.value)}
                   >
                     <option value="cpu">Standart · CPU</option>
-                    <option value="coreml">Apple hızlandırması · CoreML</option>
+                    {windows ? (
+                      <option value="directml">
+                        Ekran kartı hızlandırması · DirectML
+                      </option>
+                    ) : (
+                      <option value="coreml">Apple hızlandırması · CoreML</option>
+                    )}
                   </select>
                   <p className="small-note">
-                    Standart yöntem daha öngörülebilir çalışır. Apple
-                    hızlandırmasının ilk hazırlığı uzun sürebilir.
+                    {windows
+                      ? "Ekran kartı hızlandırması canlı kamerada ve videoda belirgin biçimde daha hızlıdır. Sorun yaşarsanız standart yöntemi seçin."
+                      : "Standart yöntem daha öngörülebilir çalışır. Apple hızlandırmasının ilk hazırlığı uzun sürebilir."}
                   </p>
                   <label className="toggle-row">
                     <span>
@@ -612,6 +654,21 @@ function App() {
                       checked={many}
                       disabled={busy}
                       onChange={(e) => setMany(e.target.checked)}
+                    />
+                  </label>
+                  <label className="toggle-row">
+                    <span>
+                      El ve nesneleri koru
+                      <small>
+                        Yüzün önündeki eli ve saç çizgisini korur. xseg.onnx
+                        gerekir.
+                      </small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={occlusion}
+                      disabled={busy}
+                      onChange={(e) => setOcclusion(e.target.checked)}
                     />
                   </label>
                   {mode === "live" && (
@@ -640,7 +697,19 @@ function App() {
                       Yüz algılama modelleri:{" "}
                       {diagnostics.analysis_models ? "hazır" : "eksik"}
                       <br />
+                      El ve nesne koruması modeli:{" "}
+                      {diagnostics.occlusion_model ? "hazır" : "eksik"}
+                      <br />
                       Video araçları: {diagnostics.ffmpeg ? "hazır" : "eksik"}
+                      {windows && (
+                        <>
+                          <br />
+                          Ekran kartı hızlandırması:{" "}
+                          {diagnostics.providers?.includes("DmlExecutionProvider")
+                            ? "hazır"
+                            : "kullanılamıyor"}
+                        </>
+                      )}
                     </p>
                   )}
                 </div>

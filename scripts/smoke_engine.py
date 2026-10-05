@@ -13,16 +13,17 @@ import sys
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+PYTHON = ROOT / ('venv/Scripts/python.exe' if os.name == 'nt' else 'venv/bin/python')
 
 def worker(config, directory):
     started = time.monotonic()
     env = {**os.environ, 'NO_ALBUMENTATIONS_UPDATE': '1', 'DLC_DEBUG_STACKS': '1',
            'MPLCONFIGDIR': str(directory / 'mpl'), 'XDG_CACHE_HOME': str(directory / 'cache'),
            'DLC_JOB_DIR': str(directory)}
-    with open(directory / f"{config['mode']}.log", 'w') as log:
-        process = subprocess.Popen([str(ROOT / 'venv/bin/python'), '-u', str(ROOT / 'engine/worker.py')],
+    with open(directory / f"{config['mode']}.log", 'w', encoding='utf-8') as log:
+        process = subprocess.Popen([str(PYTHON), '-u', str(ROOT / 'engine/worker.py')],
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
-                                   text=True, env=env, start_new_session=True)
+                                   text=True, encoding='utf-8', env=env, start_new_session=True)
         events = []
         def collect():
             for line in process.stdout:
@@ -38,12 +39,15 @@ def worker(config, directory):
         try:
             process.wait(timeout=180)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            if os.name == 'nt':
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)], capture_output=True)
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
             process.wait()
-            print((directory / f"{config['mode']}.log").read_text()[-3000:], flush=True)
+            print((directory / f"{config['mode']}.log").read_text(encoding='utf-8', errors='replace')[-3000:], flush=True)
             raise AssertionError('Motor 180 saniye içinde işlemi tamamlayamadı.')
         reader.join(timeout=5)
-    assert process.returncode == 0, (directory / f"{config['mode']}.log").read_text()[-3000:]
+    assert process.returncode == 0, (directory / f"{config['mode']}.log").read_text(encoding='utf-8', errors='replace')[-3000:]
     assert any(e['type'] == 'complete' for e in events)
     assert events[-1]['type'] == 'finished'
     print(f"{config['mode']}: {time.monotonic() - started:.1f}s", flush=True)
@@ -56,7 +60,8 @@ with tempfile.TemporaryDirectory(prefix='yuz-smoke-') as temp:
     demo.crop((78, 78, 138, 141)).resize((360, 378)).save(source)
     demo.crop((264, 67, 582, 249)).resize((636, 364)).save(target)
     image_out = directory / 'result.png'
-    config = {'mode': 'image', 'source': str(source), 'target': str(target), 'output': str(image_out), 'provider': 'cpu'}
+    config = {'mode': 'image', 'source': str(source), 'target': str(target), 'output': str(image_out),
+              'provider': 'directml' if '--directml' in sys.argv else 'cpu'}
     if '--video-only' not in sys.argv:
         worker(config, directory)
         assert Image.open(image_out).size == (636, 364)

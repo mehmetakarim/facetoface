@@ -15,8 +15,10 @@ def validate(config):
     source = Path(config.get('source') or '')
     if not source.is_file() or source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError('Kaynak yüz için geçerli bir fotoğraf seçin.')
-    if config.get('provider', 'cpu') not in {'cpu', 'coreml'}:
+    if config.get('provider', 'cpu') not in {'cpu', 'coreml', 'directml'}:
         raise ValueError('Geçersiz işlem sağlayıcısı.')
+    if type(config.get('occlusion', True)) is not bool:
+        raise ValueError('Geçersiz el ve nesne koruması ayarı.')
     if mode == 'live':
         camera = config.get('camera', 0)
         if type(camera) is not int or not 0 <= camera <= 9:

@@ -21,6 +21,8 @@ with tempfile.TemporaryDirectory(prefix='yuz paket testi ') as directory:
     diagnostics = next(event for event in events if event['type'] == 'diagnostics')
     assert diagnostics['ffmpeg'], diagnostics
     assert 'CPUExecutionProvider' in diagnostics['providers'], diagnostics
+    if sys.platform == 'win32':
+        assert 'DmlExecutionProvider' in diagnostics['providers'], diagnostics
     assert events[-1]['type'] == 'finished', events
     Path('diagnostics.jsonl').write_bytes(result.stdout)
-    print('PASS: isolated packaged engine, UTF-8, inference imports, CPU provider, bundled FFmpeg')
+    print('PASS: isolated packaged engine, UTF-8, inference imports, CPU/DirectML providers, bundled FFmpeg')

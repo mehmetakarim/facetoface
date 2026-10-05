@@ -3,7 +3,7 @@ from PyInstaller.__main__ import run
 run(['engine/worker.py', '--name=engine-worker', '--onedir', '--clean', '--noconfirm',
      '--paths=.', '--collect-all=insightface', '--copy-metadata=insightface',
      '--collect-all=onnxruntime', '--collect-all=imageio_ffmpeg',
-     '--hidden-import=engine.inference', '--hidden-import=engine.protocol',
+     '--hidden-import=engine.inference', '--hidden-import=engine.blend', '--hidden-import=engine.protocol',
      '--hidden-import=engine.output'])
 
 # Preserve installed distributions' license/notice metadata in the portable kit.

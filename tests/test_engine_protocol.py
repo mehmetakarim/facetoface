@@ -25,6 +25,14 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), b'keep')
     def test_valid_image_job(self):
         self.assertEqual(validate(self.config), self.config)
+    def test_providers(self):
+        for provider in ['cpu', 'coreml', 'directml']:
+            with self.subTest(provider=provider):
+                self.assertEqual(validate({**self.config, 'provider': provider})['provider'], provider)
+        with self.assertRaises(ValueError): validate({**self.config, 'provider': 'cuda'})
+    def test_occlusion_flag(self):
+        self.assertTrue(validate({**self.config, 'occlusion': False}) is not None)
+        with self.assertRaises(ValueError): validate({**self.config, 'occlusion': 'yes'})
     def test_live_camera_validation(self):
         for camera in [-1, 10, '0', True]:
             with self.subTest(camera=camera), self.assertRaises(ValueError):

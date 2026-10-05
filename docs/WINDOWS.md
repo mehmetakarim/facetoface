@@ -8,14 +8,15 @@ Bu paket Windows x64 içindir. Python motoru ve FFmpeg paket içindedir; ayrıca
    - Projedeki `models/inswapper_128.onnx` → `models/inswapper_128.onnx`
    - Ev klasöründeki `.insightface/models/buffalo_l/det_10g.onnx` → `models/buffalo_l/det_10g.onnx`
    - Ev klasöründeki `.insightface/models/buffalo_l/w600k_r50.onnx` → `models/buffalo_l/w600k_r50.onnx`
+   - İsteğe bağlı: `xseg.onnx` → `models/xseg.onnx`. Yüzün önündeki eli ve gerçek saç çizgisini korur. Kaynak: https://huggingface.co/hacksider/deep-live-cam/blob/main/xseg.onnx
 
 3. `Yuz-Atolyesi.exe` dosyasını açın. `engine-worker` klasörünü uygulamanın yanında bırakın.
 4. WebView2 çalışma zamanı bulunmuyorsa Microsoft'un resmî WebView2 Evergreen Runtime paketini kurun: https://developer.microsoft.com/microsoft-edge/webview2/
-5. Ayarlardaki kurulum kontrolünü çalıştırın. Standart işlem (CPU) seçeneğiyle küçük bir fotoğraf deneyin; ardından kısa video ve kamera testlerine geçin. Apple hızlandırması Windows'ta kullanılamaz.
+5. Ayarlardaki kurulum kontrolünü çalıştırın. Önce standart işlem (CPU), ardından ekran kartı hızlandırmasıyla küçük bir fotoğraf deneyin; ardından kısa video ve kamera testlerine geçin. Apple hızlandırması Windows'ta kullanılamaz.
 
 Paket henüz kod imzalı değildir. Windows bilinmeyen yayıncı uyarısı gösterebilir. Yalnızca bu deponun Releases sayfasından indirdiğiniz paketi kullanın; SHA256SUMS.txt ile bütünlüğünü kontrol edebilirsiniz.
 
-Modeller eksikse işlem başlayamaz. İlk model yüklemesi düşük kaynaklı cihazlarda uzun sürebilir. GPU hızlandırması bu sürümde Windows için sunulmaz. Sonuçları NTFS biçimli, yazılabilir bir diske kaydedin; atomik çıktı kaydı sabit bağlantı desteği gerektirir.
+Modeller eksikse işlem başlayamaz. İlk model yüklemesi düşük kaynaklı cihazlarda uzun sürebilir. Gelişmiş ayarlardaki "Ekran kartı hızlandırması · DirectML" seçeneği yüz değiştirmeyi ekran kartında çalıştırır; ayrı bir CUDA kurulumu gerekmez ve NVIDIA, AMD ve Intel kartlarda çalışır. Hibrit dizüstülerde yüksek performanslı kart seçilir. Yüz algılama işlemcide kalır. Sonuçları NTFS biçimli, yazılabilir bir diske kaydedin; atomik çıktı kaydı sabit bağlantı desteği gerektirir.
 
 ## Sorun bildirimi
 
