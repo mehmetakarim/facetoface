@@ -106,6 +106,7 @@ function App() {
   const localInput = useRef<HTMLInputElement>(null);
   const localRole = useRef<"source" | "target">("source");
   const urls = useRef<string[]>([]);
+  const lastFolder = useRef("");
 
   useEffect(() => {
     if (!native) return;
@@ -328,12 +329,19 @@ function App() {
     if (!source || !ready || (mode !== "live" && !target)) return;
     let destination: string | null = null;
     if (mode !== "live") {
+      // A fresh, readable name per job so the dialog never offers an existing file.
+      const now = new Date();
+      const two = (n: number) => String(n).padStart(2, "0");
+      const stamp =
+        `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-` +
+        `${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+      const base = (name(target) || "yuz-atolyesi").replace(/\.[^.]+$/, "");
+      const file = `${base}-sonuc-${stamp}.${mode === "image" ? "png" : "mp4"}`;
       destination = await save({
         title: "Sonucun kaydedileceği konumu seçin",
-        defaultPath:
-          mode === "image"
-            ? "yuz-atolyesi-sonuc.png"
-            : "yuz-atolyesi-sonuc.mp4",
+        defaultPath: lastFolder.current
+          ? `${lastFolder.current}${windows ? "\\" : "/"}${file}`
+          : file,
         filters: [
           {
             name: mode === "image" ? "PNG fotoğraf" : "MP4 video",
@@ -342,6 +350,7 @@ function App() {
         ],
       });
       if (!destination) return;
+      lastFolder.current = destination.replace(/[\\/][^\\/]*$/, "");
     }
     setResult("");
     setOutput("");

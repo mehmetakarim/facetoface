@@ -12,6 +12,7 @@ Windows için taşınabilir uygulama yolu, paketli Python motoru, FFmpeg bulma v
 - macOS'ta 12 Python testi ve Rust motor iptal testi geçti.
 - Fotoğraf işlemi gerçek arayüzde tamamlandı.
 - Otomatik kısa video testinde 3 kare, 636×364 boyut ve ses akışı doğrulandı. Soğuk başlangıç dahil yaklaşık 108 saniye sürdü. Bu sonuç gerçek zamanlı performans iddiası değildir.
+- Windows 11 (Ryzen 9 8940HX, 63 GB RAM, RTX 5060 Laptop 8 GB), geliştirme ortamı, 5 Ekim 2026: fotoğraf, sesli video, durdurup yeniden başlatma, canlı kamera, Türkçe karakterli ve boşluklu yollar ve art arda 5 işlem kullanıcı tarafından başarıyla denendi. 640×480 videoda CPU ile yaklaşık 1,8 kare/sn, DirectML ile yaklaşık 16,5 kare/sn (el ve nesne koruması açıkken 14,8) ölçüldü. Ekran kartı ve CPU çıktıları sayısal olarak aynıdır.
 - Windows derleme ve paketli motor kontrollerinin güncel sonucu deponun Actions sekmesinden görülebilir. Bu kontroller gerçek kamera, model ağırlıklarıyla görüntü işleme veya farklı Windows donanımlarında kullanıcı testi yerine geçmez.
 
 ## Windows deneme sırası
@@ -28,7 +29,7 @@ Her denemede işletim sistemi, CPU, RAM, işlem süresi, bellek kullanımı ve v
 
 ## Sonraki işler ve öncelikleri
 
-**Öncelik 1 — Windows doğrulaması:** gerçek donanımda fotoğraf/video/kamera ve durdurma testleri; paket bağımlılıkları, WebView2, Türkçe yollar ve izin sorunları. Sonuçlara göre ilk düzeltme sürümü hazırlanacak.
+**Öncelik 1 — Windows doğrulaması:** Geliştirme ortamındaki temel testler tamamlandı (yukarıya bakın). Kalan: Releases paketinin (`engine-worker.exe`) DirectML ve `xseg.onnx` ile gerçek donanımda denenmesi; farklı ekran kartları (AMD/Intel) ve yalnızca tümleşik GPU'lu cihazlar.
 
 **Öncelik 2 — Başlangıç süresi ve kaynak tüketimi:** aşama bazında ölçüm, model yükleme süresini azaltma, gerektiğinde ayrı kalıcı motor ve güvenli yeniden başlatma tasarımı. Bellek ve iptal güvenliği korunarak karar verilecek.
 
@@ -36,6 +37,6 @@ Her denemede işletim sistemi, CPU, RAM, işlem süresi, bellek kullanımı ve v
 
 **Öncelik 4 — Dağıtım:** Windows kurulum paketi ve kod imzalama; macOS için geliştirme klasöründen bağımsız paket, imzalama/noter onayı; sürüm yükseltme ve hata raporlama düzeni. Mevcut macOS geliştirme paketi genel kullanıma hazır bağımsız dağıtım değildir.
 
-**Sonraki özellikler:** canlı kayıt, sanal kamera, yüz eşleme, gelişmiş maskeleme ve iyileştirme; Windows GPU seçenekleri. Bunlar mevcut kararlılık ve performans testlerinden sonra değerlendirilecek.
+**Sonraki özellikler:** canlı kayıt, sanal kamera, yüz eşleme, gelişmiş maskeleme ve iyileştirme. Windows'ta DirectML eklendi; CUDA, Blackwell kartlarda yalnızca ONNX Runtime 1.30+/CUDA 13 ile çalıştığı ve paketi yaklaşık 1,5 GB büyüttüğü için ertelendi. Bunlar mevcut kararlılık ve performans testlerinden sonra değerlendirilecek.
 
 Test sonuçları gelene kadar yeni özellik kapsamı genişletilmeyecek; önce bu sürümün somut sorunları giderilecek.
