@@ -36,6 +36,10 @@ jobs:
         run: python packaging/build_worker.py
       - name: Verify packaged engine
         run: python packaging/check_worker.py dist/engine-worker/engine-worker.exe
+      - name: Build Windows 11 virtual camera
+        shell: pwsh
+        # windows-2022 has the VS 2022 toolset (v143); the project targets v145.
+        run: ./native/vcam/build.ps1 -Toolset v143
       - name: Build desktop
         working-directory: desktop
         run: |
@@ -50,6 +54,10 @@ jobs:
           New-Item -ItemType Directory -Force "$kit/models/buffalo_l"
           Copy-Item desktop/src-tauri/target/release/yuz-atolyesi.exe "$kit/Yuz-Atolyesi.exe"
           Copy-Item dist/engine-worker "$kit/engine-worker" -Recurse
+          New-Item -ItemType Directory -Force "$kit/vcam"
+          Copy-Item native/vcam/bin/YuzAtolyesiKamera.dll, native/vcam/bin/yuz-vcam.exe, native/vcam/setup.ps1 "$kit/vcam"
+          Copy-Item native/vcam/LICENSE.VCamSample "$kit/vcam/LICENSE.VCamSample"
+          foreach ($file in 'YuzAtolyesiKamera.dll', 'yuz-vcam.exe', 'setup.ps1') { if (-not (Test-Path "$kit/vcam/$file")) { throw "vcam/$file missing" } }
           Copy-Item docs/WINDOWS.md "$kit/ONCE-OKUYUN.md"
           Copy-Item LICENSE "$kit/LICENSE"
           Copy-Item docs/THIRD_PARTY.md "$kit/THIRD_PARTY.md"

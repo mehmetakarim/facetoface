@@ -32,6 +32,8 @@ try {
             $dll = Join-Path $target ('YuzAtolyesiKamera-{0}.dll' -f (Get-Date -Format 'yyyyMMddHHmmss'))
             Copy-Item -LiteralPath $source -Destination $dll
         }
+        # A downloaded ZIP marks its files as coming from the web; the copy must not be.
+        Unblock-File -LiteralPath $dll
         if (Invoke-Regsvr32 @('/s', "`"$dll`"")) { exit 4 }
         Get-ChildItem -LiteralPath $target -Filter 'YuzAtolyesiKamera*.dll' |
             Where-Object { $_.FullName -ne $dll } |

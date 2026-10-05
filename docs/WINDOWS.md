@@ -23,3 +23,12 @@ Modeller eksikse işlem başlayamaz. İlk model yüklemesi düşük kaynaklı ci
 Windows sürümü, işlemci, RAM, kullanılan mod, dosyanın boyutu/süresi, beklenen ve görülen sonuç ile işlemin ne kadar sürdüğünü not edin. Hata günlükleri `%TEMP%/yuz-atolyesi-*.log` konumundadır; paylaşmadan önce kişisel dosya yollarını silin. Özel fotoğraf veya videolarınızı herkese açık hata kayıtlarına yüklemeyin.
 
 Önerilen deneme sırası ve kalan işler: https://github.com/mehmetakarim/facetoface/blob/main/docs/DURUM-VE-YOL-HARITASI.md
+
+## Sanal kamera
+
+Canlı kamera modunda "Sanal kameraya gönder" seçeneği, işlenen görüntüyü görüntülü görüşme uygulamalarına kamera olarak iletir. Karşı tarafa aynalanmamış görüntü gider; uygulamanın kendi önizlemenizi aynalaması normaldir.
+
+- **Windows 11 — Yüz Atölyesi Kamera (önerilen):** Canlı kamera bölümündeki "Yüz Atölyesi Kamera'yı kur" düğmesiyle bir kez kurulur (yönetici izni ister). Bileşen `C:\ProgramData\YuzAtolyesi\vcam` klasörüne kopyalanıp kaydedilir. WhatsApp, Windows Kamera, Teams, Zoom ve tarayıcılarda "Yüz Atölyesi Kamera" adıyla görünür. Kamera yalnızca canlı görüntü çalışırken listededir; önce uygulamada canlı kamerayı başlatın, sonra görüşme uygulamasında bu kamerayı seçin. Görüntü durduğunda "Canlı görüntü bekleniyor" ekranı gösterilir. Aynı düğmeyle kaldırılabilir.
+- **OBS Virtual Camera (yedek):** Yüz Atölyesi Kamera kurulu değilse ve OBS Studio yüklüyse kullanılır. Yalnızca DirectShow kullanan uygulamalarda (tarayıcılar, Zoom, Discord, OBS) görünür; WhatsApp ve Microsoft Store uygulamalarında görünmez. OBS'nin kendi "Sanal Kamerayı Başlat" düğmesi açıkken kullanılamaz.
+
+Sanal kamera bileşeni Simon Mourier'in MIT lisanslı VCamSample projesinden türetilmiştir (`vcam/LICENSE.VCamSample`).

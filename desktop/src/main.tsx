@@ -508,7 +508,7 @@ function App() {
             <ShieldCheck size={16} />
             <span>Görüntüler bu cihazda işlenir.</span>
           </div>
-          <span className="version">Yüz Atölyesi · 0.1.0</span>
+          <span className="version">Yüz Atölyesi · 0.2.0</span>
         </div>
       </aside>
       <main>

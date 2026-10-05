@@ -86,7 +86,7 @@ fn send(app: &tauri::AppHandle, id: &str, mut event: Value) {
 #[tauri::command]
 fn environment() -> Value {
     let root = root();
-    json!({"python":runtime(&root).0.exists(),"swap_model":root.join("models/inswapper_128.onnx").exists(),"root":root,"version":"0.1.0"})
+    json!({"python":runtime(&root).0.exists(),"swap_model":root.join("models/inswapper_128.onnx").exists(),"root":root,"version":"0.2.0"})
 }
 /// PowerShell's -EncodedCommand takes UTF-16LE Base64: no quoting, whatever the path.
 #[cfg(windows)]
