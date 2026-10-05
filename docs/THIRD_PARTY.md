@@ -9,3 +9,5 @@ FFmpeg kaynak ve derleme bilgileri: https://github.com/imageio/imageio-ffmpeg ve
 Model ağırlıkları bu depoya veya sürüm paketine dahil edilmez. InsightFace kaynak kodu ile önceden eğitilmiş modellerin kullanım koşulları aynı değildir. Model kaynağı ve koşulları: https://github.com/deepinsight/insightface .
 
 Windows 11 sanal kamerası (`native/vcam/`), Simon Mourier'in MIT lisanslı VCamSample projesinden türetilmiştir: https://github.com/smourier/VCamSample . Özgün lisans metni `native/vcam/LICENSE.VCamSample` dosyasındadır. Derleme sırasında Microsoft'un MIT lisanslı Windows Implementation Library (WIL) ve C++/WinRT paketleri NuGet'ten indirilir.
+
+macOS sanal kamera aktarımı pyvirtualcam 0.15.0 ile sağlanır. OBS Studio ve kamera uzantısı ayrı kurulur. Lisans ve kaynak: https://github.com/letmaik/pyvirtualcam

@@ -114,10 +114,14 @@ def run(config):
     if config['mode'] == 'cameras':
         list_cameras()
         return
-    if config['mode'] == 'live' and config.get('virtual_camera'):
+    if sys.platform == 'win32' and config['mode'] == 'live' and config.get('virtual_camera'):
         from engine.virtualcam import installed as obs_installed, native_installed
         if not (native_installed() or obs_installed()):
             raise ValueError('Sanal kamera kurulu değil. Ayarlardan Yüz Atölyesi Kamera’yı kurun veya OBS Studio’yu yükleyin.')
+    if sys.platform == 'darwin' and config['mode'] == 'live' and config.get('virtual_camera'):
+        from engine.virtualcam import mac_bridge_available
+        if not mac_bridge_available():
+            raise ValueError('Sanal kamera bileşeni eksik. macOS kurulum rehberindeki Python bağımlılığını yükleyin.')
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
     import numpy as np
@@ -136,7 +140,7 @@ def run(config):
         except (ImportError, RuntimeError):
             ffmpeg = None
     if config['mode'] == 'diagnostics':
-        from engine.virtualcam import installed as virtualcam_installed, native_installed
+        from engine.virtualcam import installed as virtualcam_installed, native_installed, mac_bridge_available
         if config.get('check_inference'):
             from engine.inference import load_inference
             load_inference()
@@ -144,7 +148,7 @@ def run(config):
                 subprocess.run([ffmpeg, '-version'], check=True, capture_output=True, timeout=15, **SUBPROCESS_FLAGS)
         emit('diagnostics', python=sys.version.split()[0], providers=ort.get_available_providers(),
              swap_model=model_path.is_file(), analysis_models=all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']),
-             occlusion_model=occlusion_path.is_file(), virtual_camera=virtualcam_installed(), native_camera=native_installed(), ffmpeg=bool(ffmpeg))
+             occlusion_model=occlusion_path.is_file(), virtual_camera=virtualcam_installed(), native_camera=native_installed(), mac_bridge=mac_bridge_available(), ffmpeg=bool(ffmpeg))
         return
     if not all((analysis_dir / n).is_file() for n in ['det_10g.onnx', 'w600k_r50.onnx']):
         raise ValueError('Yüz algılama modelleri eksik. det_10g.onnx ve w600k_r50.onnx dosyalarını models/buffalo_l klasörüne yerleştirin.')

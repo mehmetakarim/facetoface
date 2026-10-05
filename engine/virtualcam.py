@@ -162,9 +162,16 @@ def native_available():
     return bool(helper) and (helper.parent / 'YuzAtolyesiKamera.dll').is_file()
 
 
+def mac_bridge_available():
+    if sys.platform != 'darwin':
+        return False
+    from importlib.util import find_spec
+    return find_spec('pyvirtualcam') is not None
+
+
 def status():
     return {'native_available': native_available(), 'native_camera': native_installed(),
-            'obs_camera': installed()}
+            'obs_camera': installed(), 'mac_bridge': mac_bridge_available()}
 
 
 def native_installed():
@@ -255,8 +262,48 @@ class WindowsCamera:
                 self.process.wait()
 
 
+class MacCamera:
+    """OBS 30+ Camera Extension through pyvirtualcam; no Windows shared memory."""
+    name = 'OBS Virtual Camera'
+
+    def __init__(self, width, height, fps=30):
+        import platform
+        from importlib import import_module
+        if int(platform.mac_ver()[0].split('.')[0] or 0) < 13:
+            raise ValueError('macOS sanal kamera desteği için macOS 13 veya üzeri gerekir.')
+        try:
+            bridge = import_module('pyvirtualcam')
+        except ImportError as error:
+            raise ValueError('Sanal kamera bileşeni eksik. macOS kurulum rehberindeki Python bağımlılığını yükleyin.') from error
+        self.width, self.height = width & ~1, height & ~1
+        if self.width < 2 or self.height < 2:
+            raise ValueError('Sanal kamera için görüntü boyutu geçersiz.')
+        self.camera = None
+        try:
+            self.camera = bridge.Camera(width=self.width, height=self.height, fps=fps,
+                                        fmt=bridge.PixelFormat.BGR, backend='obs')
+        except (RuntimeError, OSError) as error:
+            raise ValueError('OBS sanal kamerası açılamadı. OBS Studio 30 veya üzerini kurun; kamera uzantısına izin verin. OBS’de sanal kamerayı bir kez başlatıp durdurun ve OBS’yi kapatarak yeniden deneyin.') from error
+
+    def send(self, frame):
+        import cv2
+        import numpy as np
+        if self.camera is None:
+            raise ValueError('Sanal kamera kapalı. Canlı görüntüyü yeniden başlatın.')
+        if frame.shape[:2] != (self.height, self.width):
+            frame = cv2.resize(frame, (self.width, self.height))
+        self.camera.send(np.ascontiguousarray(frame))
+
+    def close(self):
+        camera, self.camera = self.camera, None
+        if camera is not None:
+            camera.close()
+
+
 def open_camera(width, height):
     """Prefer the camera every app can see; fall back to OBS."""
+    if sys.platform == 'darwin':
+        return MacCamera(width, height)
     if native_installed():
         return WindowsCamera()
     return VirtualCamera(width, height)

@@ -16,3 +16,6 @@ tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
 protobuf==4.25.1
 pygrabber
+
+# macOS OBS 30+ Camera Extension bridge
+pyvirtualcam==0.15.0; sys_platform == 'darwin'

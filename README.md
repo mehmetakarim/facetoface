@@ -2,7 +2,7 @@
 
 Türkçe arayüzlü, Tauri ve React ile geliştirilen masaüstü yüz değiştirme uygulaması. Deep-Live-Cam temel alınmıştır; görüntü işleme motoru Python ile ayrı bir süreçte çalışır. Böylece motorun yavaşlaması arayüzün olay döngüsünü doğrudan kilitlemez. İşlemler durdurulabilir; yanıt vermeyen motor zaman aşımıyla sonlandırılır.
 
-**Durum: 0.1.0 ilk test sürümü.** Kullanıcının Apple M1 üzerindeki macOS denemeleri başarılıdır. Windows desteği yeni eklenmiştir; gerçek donanım, kamera ve performans testleri beklenmektedir. İlk model yüklemesi uzun sürebilir; Tauri tek başına görüntü işleme hızını artırmaz.
+**Durum: 0.2.0 tabanlı geliştirme dalı.** Kullanıcının Apple M1 üzerindeki macOS denemeleri başarılıdır. Windows desteği yeni eklenmiştir; gerçek donanım, kamera ve performans testleri beklenmektedir. İlk model yüklemesi uzun sürebilir; Tauri tek başına görüntü işleme hızını artırmaz.
 
 ## Kullanım
 
@@ -21,10 +21,14 @@ Türkçe arayüzlü, Tauri ve React ile geliştirilen masaüstü yüz değiştir
 - `packaging/`, `.github/workflows/`: Windows x64 paketleme ve sürüm iş akışı.
 - `modules/`, `run.py`: eski Deep-Live-Cam uygulaması; yeni arayüz bunları başlatmaz.
 
-Fotoğraf, video ve canlı önizleme; CPU ve macOS üzerinde deneysel CoreML seçeneği bulunur. Sanal kamera, canlı kayıt ve gelişmiş yüz eşleme henüz yoktur.
+Fotoğraf, video ve canlı önizleme; CPU ve macOS üzerinde deneysel CoreML seçeneği bulunur. Windows sanal kamera desteğine ek olarak bu dalda macOS için OBS üzerinden aktarım bulunur. Canlı kayıt ve gelişmiş yüz eşleme henüz yoktur.
 
 ## Lisans ve modeller
 
 Kaynak kod GNU AGPL-3.0 lisansı altındadır; [LICENSE](LICENSE) dosyası korunmuştur. Özgün proje: [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam). Önceki açıklamalar [upstream README](docs/UPSTREAM_README.md) dosyasındadır. [Üçüncü taraf notları](docs/THIRD_PARTY.md).
 
 ONNX model ağırlıkları dağıtıma dahil değildir; bunların lisansları uygulama kodundan ayrıdır. Yalnızca kullanım hakkınız olan modelleri ve izinli görüntüleri kullanın. Yeni motor model dosyalarını otomatik indirmez.
+
+## macOS sanal kamera
+
+macOS 13+ ve OBS Studio 30+ kamera uzantısıyla canlı görüntü aktarımı desteklenir. [Kurulum ve test rehberi](docs/MACOS.md).

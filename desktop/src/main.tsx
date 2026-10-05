@@ -45,10 +45,12 @@ type EngineEvent = {
   native_available?: boolean;
   native_camera?: boolean;
   obs_camera?: boolean;
+  mac_bridge?: boolean;
   ffmpeg?: boolean;
 };
 const native = isTauri();
 const windows = navigator.userAgent.includes("Windows");
+const macos = navigator.userAgent.includes("Macintosh") || navigator.userAgent.includes("Mac OS X");
 // Remembered per device; storage may be unavailable, so every access is guarded.
 function stored<T extends string>(key: string, fallback: T, allowed: T[]): T {
   try {
@@ -104,6 +106,7 @@ function App() {
     native_available?: boolean;
     native_camera?: boolean;
     obs_camera?: boolean;
+    mac_bridge?: boolean;
   }>();
   const [settingUp, setSettingUp] = useState(false);
   const [cameras, setCameras] = useState<{ index: number; name: string }[]>();
@@ -155,6 +158,7 @@ function App() {
           native_available: e.native_available,
           native_camera: e.native_camera,
           obs_camera: e.obs_camera,
+          mac_bridge: e.mac_bridge,
         });
         setCamera((current) =>
           list.length && !list.some((c) => c.index === current)
@@ -248,7 +252,7 @@ function App() {
     }, 300);
     return () => clearInterval(timer);
   }, [mode, cameras]);
-  async function launch(config: Record<string, unknown>, check = false) {
+  async function launch(config: Record<string, unknown>, check = false, preserveError = false) {
     if (busyRef.current) return;
     if (!native) {
       setError(
@@ -266,7 +270,7 @@ function App() {
     busyRef.current = true;
     setBusy(true);
     setChecking(check);
-    setError("");
+    if (!preserveError) setError("");
     setElapsed(0);
     started.current = Date.now();
     setMessage(
@@ -436,7 +440,7 @@ function App() {
       setError(String(e));
     } finally {
       setSettingUp(false);
-      launch({ mode: "cameras" });
+      launch({ mode: "cameras" }, false, true);
     }
   }
   async function stop() {
@@ -447,7 +451,7 @@ function App() {
     }
   }
   const canStart =
-    !!source && (ready || !native) && (mode === "live" || !!target) && !busy;
+    !!source && (ready || !native) && (mode === "live" || !!target) && !busy && !settingUp;
   const shownImage = original ? targetImage : result || targetImage;
   return (
     <div className="shell">
@@ -660,12 +664,14 @@ function App() {
                   >
                     <RefreshCw size={14} /> Kameraları yenile
                   </button>
-                  {windows && (
+                  {(windows || macos) && (
                     <label className="toggle-row">
                       <span>
                         Sanal kameraya gönder
                         <small>
-                          {vcam?.native_camera
+                          {macos
+                            ? "Görüşme uygulamasında “OBS Virtual Camera”yı seçin. OBS’nin kamera uzantısının kurulmuş olması gerekir."
+                            : vcam?.native_camera
                             ? "WhatsApp, Teams, Zoom, Meet ve diğer uygulamalarda “Yüz Atölyesi Kamera”yı seçin. Kamera, canlı görüntü başlayınca listede görünür."
                             : vcam?.native_available
                               ? "Tüm uygulamalarda görünmesi için Yüz Atölyesi Kamera'yı bir kez kurun." +
@@ -684,6 +690,19 @@ function App() {
                         onChange={(e) => setVirtualCamera(e.target.checked)}
                       />
                     </label>
+                  )}
+                  {macos && (
+                    <details className="small-note">
+                      <summary>Mac’te sanal kamera nasıl kurulur?</summary>
+                      <ol>
+                        <li>macOS 13 veya üzerinde OBS Studio 30 ya da daha yeni bir sürümünü kurun.</li>
+                        <li>OBS’de “Sanal Kamerayı Başlat” düğmesine basın. macOS isterse Sistem Ayarları’ndan OBS kamera uzantısına izin verin.</li>
+                        <li>OBS’de sanal kamerayı durdurun ve OBS’yi kapatın.</li>
+                        <li>Burada “Sanal kameraya gönder” seçeneğini açıp canlı görüntüyü başlatın. Görüşme uygulamasında “OBS Virtual Camera”yı seçin.</li>
+                      </ol>
+                      <p>İlk kurulumdan sonra OBS’nin açık kalması gerekmez. Aktarım yalnızca canlı görüntü çalışırken yapılır.</p>
+                      {vcam && !vcam.mac_bridge && <p>Sanal kamera bileşeni eksik. macOS kurulum rehberindeki Python bağımlılığını yükleyin.</p>}
+                    </details>
                   )}
                   {windows && vcam?.native_available && (
                     <button
@@ -841,6 +860,10 @@ function App() {
                       {diagnostics.occlusion_model ? "hazır" : "eksik"}
                       <br />
                       Video araçları: {diagnostics.ffmpeg ? "hazır" : "eksik"}
+                      {macos && (<>
+                        <br />Sanal kamera aktarım bileşeni: {diagnostics.mac_bridge ? "hazır" : "eksik"}
+                        <br />OBS uzantısı ve macOS izni canlı aktarım başlatılırken denetlenir.
+                      </>)}
                       {windows && (
                         <>
                           <br />
