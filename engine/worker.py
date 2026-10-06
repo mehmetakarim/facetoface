@@ -94,9 +94,9 @@ def camera_api(cv2):
 
 def list_cameras():
     """Device names without opening any camera, so no permission prompt appears."""
-    import cv2
     cameras = []
     if sys.platform == 'win32':
+        import cv2
         from cv2_enumerate_cameras import enumerate_cameras
         seen = {}
         for info in enumerate_cameras(camera_api(cv2)):
