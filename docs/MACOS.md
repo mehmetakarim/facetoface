@@ -35,3 +35,11 @@ venv/bin/python scripts/smoke_macos_virtualcam.py
 İkinci komut fiziksel kameranızı açmaz; 15 saniye boyunca sentetik renk şeritleri gönderir. Görüşme uygulamasından OBS Virtual Camera’yı seçerek renkleri ve yönü kontrol edin. Ardından gerçek canlı akışta başlatma, durdurma, yeniden başlatma ve görüntülü görüşme testlerini tamamlayın.
 
 Kaynaklar: [pyvirtualcam macOS kurulumu](https://github.com/letmaik/pyvirtualcam#macos-obs), [OBS kamera sorun giderme](https://obsproject.com/kb/virtual-camera-troubleshooting).
+
+## Yerel doğrulama — 6 Ekim 2026
+
+OBS 32.2.2 kamera uzantısı kullanıcı onayıyla etkinleştirildi. Mac aktarım sınıfıyla gönderilen sentetik renk şeritleri, ayrı bir FFmpeg/AVFoundation alıcısıyla OBS Virtual Camera üzerinden beş kare boyunca okundu. Mavi, yeşil ve kırmızı bölgelerin renkleri ve sırası doğrulandı. Aktarım sonunda kamera kapatıldı; fiziksel kamera veya mikrofon kullanılmadı.
+
+Bu kurulumda OBS alıcıya 1920×1080 / 60 fps modu bildiriyor. Bu değer yüz işleme motorunun gerçek işlem hızı değildir. Görüşme uygulamalarında gerçek yüz akışı ayrıca denenmelidir.
+
+Yeni macOS sürümlerinde izin yolu: Sistem Ayarları → Genel → Oturum Açma Öğeleri ve Genişletmeler → OBS → Ortam Genişletmesi.

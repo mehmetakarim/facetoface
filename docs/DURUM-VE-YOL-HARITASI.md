@@ -45,4 +45,4 @@ Test sonuçları gelene kadar yeni özellik kapsamı genişletilmeyecek; önce b
 
 `codex/macos-virtual-camera` dalında OBS 30+ kamera uzantısına BGR görüntü aktarımı, Türkçe kurulum yönlendirmesi ve eksik bağımlılık hata mesajları eklendi. macOS 13+ gerekir. Python aktarım bağımlılığı geliştirme ortamına kuruldu. Mac yönlendirme, görüntü biçimi, boyut uyarlama, kapatma ve eksik kurulum için 6 test eklendi.
 
-Yerelde 20 test geçti, Windows'a özel 5 test atlandı. Gerçek kamera açma denemesi bu Mac'te OBS uzantısının bulunmadığını doğruladı. Görüşme uygulamasına gerçek aktarım, OBS kurulumu ve macOS kamera uzantısı onayından sonra doğrulanmalıdır. [Kurulum ve sentetik görüntü testi](MACOS.md). Bu geliştirme yayımlanmış 0.2.0 paketini değiştirmez.
+Yerelde 20 test geçti, Windows'a özel 5 test atlandı. OBS 32.2.2 kamera uzantısı kullanıcı onayıyla etkinleştirildi. Sentetik görüntü ayrı bir AVFoundation alıcısında beş kare boyunca okundu; renkler ve yön doğrulandı. Görüşme uygulamalarında gerçek yüz akışı ayrıca denenmelidir. [Kurulum ve sentetik görüntü testi](MACOS.md). Bu geliştirme yayımlanmış 0.2.0 paketini değiştirmez.
