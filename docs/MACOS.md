@@ -65,3 +65,11 @@ uzantısının geliştirilmesini, imzalanmasını ve dağıtılmasını gerektir
 Kamera izni de model hazırlığından önce kontrol edilir. İlk istekte macOS'un
 izin yanıtı beklenir; ret ve zaman aşımı durumları Türkçe açıklanır. Böylece
 OpenCV'nin izin isteğini başlatıp hemen başarısız dönmesi engellenir.
+
+7 Ekim 2026 yerel doğrulaması: Kamera 0'ın OBS Virtual Camera, Kamera 1'in
+FaceTime HD Kamera olduğu görüldü. Düzeltme sonrası uygulama FaceTime'ı adıyla
+seçti; izin kontrolünü geçip CPU yöntemiyle gerçek canlı görüntü üretti ve sanal
+çıktıyı açtı. Bu denemede hız yaklaşık 0,3–0,5 kare/sn idi; akıcı performans
+onaylanmış değildir. CoreML hazırlığı bir dakikayı geçtiği için CPU ile sınandı.
+31 otomatik testten 25'i geçti, 6'sı koşullu olarak atlandı; TypeScript/Vite ve
+macOS Tauri debug app derlemesi başarılı oldu.
