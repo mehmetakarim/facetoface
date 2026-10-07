@@ -95,6 +95,9 @@ def camera_api(cv2):
 def list_cameras():
     """Device names without opening any camera, so no permission prompt appears."""
     cameras = []
+    if sys.platform == 'darwin':
+        from engine.cameras import mac_cameras
+        cameras = mac_cameras()
     if sys.platform == 'win32':
         import cv2
         from cv2_enumerate_cameras import enumerate_cameras
@@ -122,6 +125,11 @@ def run(config):
         from engine.virtualcam import mac_bridge_available
         if not mac_bridge_available():
             raise ValueError('Sanal kamera bileşeni eksik. macOS kurulum rehberindeki Python bağımlılığını yükleyin.')
+    if sys.platform == 'darwin' and config['mode'] == 'live':
+        from engine.cameras import resolve_mac_camera, ensure_mac_camera_permission
+        config['camera'] = resolve_mac_camera(config.get('camera', 0), config.get('camera_id'))
+        phase('Kamera erişimi kontrol ediliyor… macOS izin isterse erişime izin verin.')
+        ensure_mac_camera_permission()
     phase('Görüntü işleme bileşenleri hazırlanıyor…')
     import cv2
     import numpy as np
@@ -271,6 +279,9 @@ def run(config):
 
     if mode == 'video' and not ffmpeg:
         raise ValueError('Video işlemek için FFmpeg kurulmalıdır.')
+    if mode == 'live' and sys.platform == 'darwin':
+        # Model initialization may take long enough for devices to change.
+        config['camera'] = resolve_mac_camera(config.get('camera', 0), config.get('camera_id'))
     cap = cv2.VideoCapture(config.get('camera', 0), camera_api(cv2)) if mode == 'live' else cv2.VideoCapture(config['target'])
     encoder = None
     temp_dir = None

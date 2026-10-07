@@ -37,6 +37,11 @@ class ProtocolTests(unittest.TestCase):
         for camera in [-1, 10, '0', True]:
             with self.subTest(camera=camera), self.assertRaises(ValueError):
                 validate(dict(mode='live', source=str(self.source), camera=camera))
+    def test_camera_id_validation(self):
+        for device_id in ['', 3, True, 'x' * 1025]:
+            with self.subTest(device_id=device_id), self.assertRaises(ValueError):
+                validate(dict(mode='live', source=str(self.source), camera_id=device_id))
+        self.assertEqual(validate(dict(mode='live', source=str(self.source), camera_id='B'))['camera_id'], 'B')
     def test_wrong_output_format(self):
         with self.assertRaises(ValueError): validate({**self.config, 'output': str(self.root / 'bad.mp4')})
     def test_protocol_keeps_turkish_and_single_line(self):

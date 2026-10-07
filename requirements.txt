@@ -19,3 +19,5 @@ pygrabber
 
 # macOS OBS 30+ Camera Extension bridge
 pyvirtualcam==0.15.0; sys_platform == 'darwin'
+
+pyobjc-framework-AVFoundation==12.2.2; sys_platform == 'darwin'

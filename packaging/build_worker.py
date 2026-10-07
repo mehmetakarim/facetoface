@@ -1,7 +1,7 @@
 """Keep raw InsightFace sources for the private inference namespace."""
 import sys
 from PyInstaller.__main__ import run
-mac_options = ['--collect-all=pyvirtualcam'] if sys.platform == 'darwin' else []
+mac_options = ['--collect-all=pyvirtualcam', '--hidden-import=AVFoundation'] if sys.platform == 'darwin' else []
 run(['engine/worker.py', '--name=engine-worker', '--onedir', '--clean', '--noconfirm',
      '--paths=.', '--collect-all=insightface', '--copy-metadata=insightface',
      '--collect-all=onnxruntime', '--collect-all=cv2_enumerate_cameras', '--collect-all=imageio_ffmpeg',

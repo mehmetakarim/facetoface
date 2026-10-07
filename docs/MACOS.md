@@ -43,3 +43,25 @@ OBS 32.2.2 kamera uzantısı kullanıcı onayıyla etkinleştirildi. Mac aktarı
 Bu kurulumda OBS alıcıya 1920×1080 / 60 fps modu bildiriyor. Bu değer yüz işleme motorunun gerçek işlem hızı değildir. Görüşme uygulamalarında gerçek yüz akışı ayrıca denenmelidir.
 
 Yeni macOS sürümlerinde izin yolu: Sistem Ayarları → Genel → Oturum Açma Öğeleri ve Genişletmeler → OBS → Ortam Genişletmesi.
+
+
+### Siyah görüntü ve kamera ışığının yanmaması
+
+OpenCV 4.10, macOS kameralarını cihaz kimliğine göre sıralar. OBS Virtual Camera
+0 numaraya yerleşebildiği için varsayılan 0 seçimi uygulamanın kendi çıktısını
+giriş olarak okuyabiliyordu. Kamera listesi artık AVFoundation üzerinden cihaz
+adlarını getirir, çıkış kamerasını girişlerden çıkarır ve gerçek indeksleri korur.
+Canlı işlem başlarken cihaz kimliği yeniden çözülür; bağlantısı kesilen cihazın
+yerine başka bir kamera sessizce açılmaz. Eski arayüzün çıkış indeksiyle başlattığı
+işler de açıklayıcı bir hata ile durdurulur.
+
+Mevcut geliştirme ortamında **Kameraları yenile → FaceTime HD Kamera** seçimiyle
+devam edin. Ek bağımlılık: `pip install -r packaging/requirements-macos-camera.txt`.
+Normal kamera önizlemesi OBS gerektirmez. Diğer uygulamalara sanal kamera olarak
+gönderim için bu sürüm OBS kamera uzantısını kullanır; OBS uygulamasının açık
+kalması gerekmez. Tamamen OBS bağımsız macOS çıkışı ayrı bir Core Media IO kamera
+uzantısının geliştirilmesini, imzalanmasını ve dağıtılmasını gerektirir.
+
+Kamera izni de model hazırlığından önce kontrol edilir. İlk istekte macOS'un
+izin yanıtı beklenir; ret ve zaman aşımı durumları Türkçe açıklanır. Böylece
+OpenCV'nin izin isteğini başlatıp hemen başarısız dönmesi engellenir.

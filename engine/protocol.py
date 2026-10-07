@@ -22,6 +22,9 @@ def validate(config):
     if type(config.get('virtual_camera', False)) is not bool:
         raise ValueError('Geçersiz sanal kamera ayarı.')
     if mode == 'live':
+        device_id = config.get('camera_id')
+        if device_id is not None and (not isinstance(device_id, str) or not 1 <= len(device_id) <= 1024):
+            raise ValueError('Geçersiz kamera kimliği.')
         camera = config.get('camera', 0)
         if type(camera) is not int or not 0 <= camera <= 9:
             raise ValueError('Kamera numarası 0 ile 9 arasında olmalıdır.')

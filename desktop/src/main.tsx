@@ -41,7 +41,7 @@ type EngineEvent = {
   analysis_models?: boolean;
   occlusion_model?: boolean;
   virtual_camera?: boolean;
-  cameras?: { index: number; name: string }[];
+  cameras?: { index: number; name: string; id?: string }[];
   native_available?: boolean;
   native_camera?: boolean;
   obs_camera?: boolean;
@@ -109,7 +109,7 @@ function App() {
     mac_bridge?: boolean;
   }>();
   const [settingUp, setSettingUp] = useState(false);
-  const [cameras, setCameras] = useState<{ index: number; name: string }[]>();
+  const [cameras, setCameras] = useState<{ index: number; name: string; id?: string }[]>();
   const [settings, setSettings] = useState(false);
   const [help, setHelp] = useState(false);
   const [original, setOriginal] = useState(false);
@@ -419,6 +419,7 @@ function App() {
       occlusion,
       virtual_camera: mode === "live" && virtualCamera,
       camera,
+      camera_id: cameras?.find((c) => c.index === camera)?.id,
     });
   }
   async function setupVcam(action: "install" | "uninstall") {
