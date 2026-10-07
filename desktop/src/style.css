@@ -1156,3 +1156,50 @@ progress {
 .sidebar-note > span:last-child {
   color: #76816b;
 }
+
+/* Person picker under the target */
+.people {
+  margin-top: 12px;
+}
+.people-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.person {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8f9f2;
+  cursor: pointer;
+}
+.person img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.person.picked {
+  border-color: var(--green);
+}
+.person:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.person-check {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+}

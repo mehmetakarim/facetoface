@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 if os.environ.get('DLC_DEBUG_STACKS') == '1':
@@ -28,7 +29,7 @@ ROOT = Path(os.environ.get('DLC_PROJECT_ROOT', Path(__file__).resolve().parents[
 SUBPROCESS_FLAGS = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
 STARTED_AT = time.monotonic()
 sys.path.insert(0, str(ROOT))
-from engine.protocol import validate, encode
+from engine.protocol import validate, encode, IMAGE_EXTENSIONS, MAX_SELECTED_FACES
 from engine.output import publish
 
 # Keep an independent descriptor so C/C++ logs cannot corrupt JSON messages.
@@ -110,6 +111,73 @@ def list_cameras():
     emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9], **status())
 
 
+def thumbnail(frame, bbox, size=112):
+    """Square JPEG of a face with some context, for the person picker."""
+    import cv2
+    h, w = frame.shape[:2]
+    x0, y0, x1, y1 = bbox
+    side = max(x1 - x0, y1 - y0) * 1.4
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    left, top = int(max(cx - side / 2, 0)), int(max(cy - side / 2, 0))
+    right, bottom = int(min(cx + side / 2, w)), int(min(cy + side / 2, h))
+    crop = cv2.resize(frame[top:bottom, left:right], (size, size), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    return base64.b64encode(buf).decode('ascii') if ok else ''
+
+
+def sample_frames(target, samples=48):
+    """The target image, or frames spread over the whole video."""
+    import cv2
+    import numpy as np
+    if Path(target).suffix.lower() in IMAGE_EXTENSIONS:
+        image = cv2.imdecode(np.fromfile(target, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError('Hedef fotoğraf okunamadı.')
+        return [image]
+    cap = cv2.VideoCapture(target)
+    frames = []
+    try:
+        if not cap.isOpened():
+            raise ValueError('Video açılamadı. Dosya biçimini kontrol edin.')
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        for position in (np.linspace(0, total - 1, min(samples, total)).astype(int) if total > 0 else []):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(position))
+            ok, frame = cap.read()
+            if ok:
+                frames.append(frame)
+        # Some containers report no frame count or cannot seek; read the start instead.
+        step = 15
+        for index in range(samples * step if not frames else 0):
+            ok, frame = cap.read()
+            if not ok:
+                break
+            if index % step == 0:
+                frames.append(frame)
+    finally:
+        cap.release()
+    return frames
+
+
+def find_people(target, detect, recognizer):
+    import numpy as np
+    from engine.people import group
+    phase('Hedefteki kişiler aranıyor…')
+    faces = []
+    for frame in sample_frames(target):
+        for face in detect(frame):
+            x0, y0, x1, y1 = face.bbox
+            if min(x1 - x0, y1 - y0) < 32:  # too small to recognise reliably
+                continue
+            recognizer.get(frame, face)
+            quality = float(face.det_score) * (x1 - x0) * (y1 - y0)
+            faces.append((face.normed_embedding.astype(np.float32), quality, thumbnail(frame, face.bbox)))
+    people = group(faces)[:MAX_SELECTED_FACES]
+    emit('target_faces',
+         people=[{'count': p['count'], 'image': p['thumbnail'],
+                  'embedding': [round(float(v), 5) for v in p['center']]} for p in people],
+         message=f'Hedefte {len(people)} kişi bulundu.' if people else 'Hedefte yüz bulunamadı.')
+
+
 def run(config):
     if config['mode'] == 'cameras':
         list_cameras()
@@ -173,6 +241,15 @@ def run(config):
         bboxes, keypoints = detector.detect(frame, max_num=0, metric='default')
         return [Face(bbox=box[:4], kps=keypoints[i], det_score=box[4])
                 for i, box in enumerate(bboxes)]
+
+    def load_recognizer(providers=('CPUExecutionProvider',), sess_options=opts):
+        model = get_model(str(analysis_dir / 'w600k_r50.onnx'), providers=list(providers), sess_options=sess_options)
+        model.prepare(ctx_id=0)
+        return model
+
+    if config['mode'] == 'target_faces':
+        find_people(config['target'], detect, load_recognizer())
+        return
     source_image = cv2.imdecode(np.fromfile(config['source'], dtype=np.uint8), cv2.IMREAD_COLOR)
     if source_image is None:
         raise ValueError('Fotoğraf okunamadı. PNG veya JPEG biçiminde başka bir dosya seçin.')
@@ -184,11 +261,15 @@ def run(config):
     if config['mode'] == 'source':
         return
     phase('Kaynak yüz hazırlanıyor…')
-    recognizer = get_model(str(analysis_dir / 'w600k_r50.onnx'),
-                                               providers=['CPUExecutionProvider'], sess_options=opts)
-    recognizer.prepare(ctx_id=0)
+    recognizer = load_recognizer()
     recognizer.get(source_image, source)
-    del recognizer
+    # Chosen people are recognised in every frame; otherwise the model is not needed.
+    targets = None if config.get('many_faces', False) else config.get('target_embeddings') or None
+    if targets:
+        targets = np.asarray(targets, np.float32)
+        targets /= np.linalg.norm(targets, axis=1, keepdims=True)
+    else:
+        recognizer = None
     if not model_path.is_file():
         raise ValueError('Yüz değiştirme modeli eksik. inswapper_128.onnx dosyasını models klasörüne yerleştirin.')
     provider = config.get('provider', 'cpu')
@@ -215,6 +296,11 @@ def run(config):
         providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance', 'device_filter': 'gpu'}),
                      'CPUExecutionProvider']
     swapper = get_model(str(model_path), providers=providers, sess_options=swap_opts)
+    if recognizer is not None and provider == 'directml':
+        try:
+            recognizer = load_recognizer(providers, swap_opts)
+        except Exception:  # keep the CPU session; recognition is only slower there
+            traceback.print_exc(file=sys.stderr)
     from engine.blend import Blender, Occluder
     occluder = None
     if config.get('occlusion', True):
@@ -246,7 +332,15 @@ def run(config):
     def transform(frame):
         # Only the source needs a recognition embedding. Target faces need landmarks.
         found = detect(frame)
-        selected = found if config.get('many_faces', False) else sorted(found, key=lambda f: f.bbox[0])[:1]
+        if config.get('many_faces', False):
+            selected = found
+        elif targets is not None:
+            from engine.people import choose
+            for face in found:
+                recognizer.get(frame, face)
+            selected = [found[i] for i in choose([f.normed_embedding for f in found], targets)]
+        else:
+            selected = sorted(found, key=lambda f: f.bbox[0])[:1]
         for target_face in selected:
             fake, M = swapper.get(frame, target_face, source, paste_back=False)
             frame = blender.paste(frame, fake, M)
@@ -259,7 +353,8 @@ def run(config):
             raise ValueError('Hedef fotoğraf okunamadı.')
         frame, count = transform(frame)
         if not count:
-            raise ValueError('Hedef fotoğrafta yüz bulunamadı. Başka bir fotoğraf seçin.')
+            raise ValueError('Seçilen kişi hedef fotoğrafta bulunamadı.' if targets is not None
+                             else 'Hedef fotoğrafta yüz bulunamadı. Başka bir fotoğraf seçin.')
         suffix = Path(config['output']).suffix
         ok, encoded = cv2.imencode(suffix, frame)
         if not ok:

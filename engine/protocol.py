@@ -4,14 +4,27 @@ from pathlib import Path
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm'}
+EMBEDDING_SIZE = 512  # w600k_r50 output
+MAX_SELECTED_FACES = 8
 
 
 def validate(config):
     mode = config.get('mode')
-    if mode not in {'diagnostics', 'cameras', 'source', 'image', 'video', 'live'}:
+    if mode not in {'diagnostics', 'cameras', 'target_faces', 'source', 'image', 'video', 'live'}:
         raise ValueError('Geçersiz çalışma modu.')
     if mode in {'diagnostics', 'cameras'}:
         return config
+    if mode == 'target_faces':
+        # Finds the people in a target before any source is chosen.
+        target = Path(config.get('target') or '')
+        if not target.is_file() or target.suffix.lower() not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
+            raise ValueError('Kişileri bulmak için geçerli bir fotoğraf veya video seçin.')
+        return config
+    selected = config.get('target_embeddings', [])
+    if (type(selected) is not list or len(selected) > MAX_SELECTED_FACES
+            or any(type(e) is not list or len(e) != EMBEDDING_SIZE
+                   or not all(type(v) in (int, float) for v in e) for e in selected)):
+        raise ValueError('Geçersiz kişi seçimi. Hedefteki kişileri yeniden bulun.')
     source = Path(config.get('source') or '')
     if not source.is_file() or source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError('Kaynak yüz için geçerli bir fotoğraf seçin.')

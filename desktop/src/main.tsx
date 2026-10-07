@@ -46,8 +46,10 @@ type EngineEvent = {
   native_camera?: boolean;
   obs_camera?: boolean;
   mac_bridge?: boolean;
+  people?: Person[];
   ffmpeg?: boolean;
 };
+type Person = { count: number; image: string; embedding: number[] };
 const native = isTauri();
 const windows = navigator.userAgent.includes("Windows");
 const macos = navigator.userAgent.includes("Macintosh") || navigator.userAgent.includes("Mac OS X");
@@ -94,6 +96,9 @@ function App() {
     ),
   );
   const [many, setMany] = useState(false);
+  // People found in the target; picked holds their indices.
+  const [people, setPeople] = useState<Person[]>();
+  const [picked, setPicked] = useState<number[]>([]);
   const [mirror, setMirror] = useState(true);
   const [occlusion, setOcclusion] = useState(
     () => stored("occlusion", "on", ["on", "off"]) === "on",
@@ -170,6 +175,10 @@ function App() {
             ? `${list.length} kamera bulundu.`
             : "Kamera bulunamadı. Numarayla seçmeyi deneyin.",
         );
+      }
+      if (e.type === "target_faces") {
+        setPeople(e.people || []);
+        setPicked([]);
       }
       if (e.type === "error") setError(e.message || "İşlem tamamlanamadı.");
       if (["exit", "stopped"].includes(e.type)) {
@@ -332,7 +341,9 @@ function App() {
       } else {
         setTarget(path);
         setTargetImage(image);
-        setMessage("Hedef seçildi. Hazır olduğunuzda işlemi başlatın.");
+        setPeople(undefined);
+        setPicked([]);
+        await launch({ mode: "target_faces", target: path });
       }
     } catch (e) {
       setError(String(e));
@@ -362,6 +373,8 @@ function App() {
     setMode(next);
     setTarget("");
     setTargetImage("");
+    setPeople(undefined);
+    setPicked([]);
     setResult("");
     setOutput("");
     setError("");
@@ -415,6 +428,10 @@ function App() {
       output: destination,
       provider,
       many_faces: many,
+      target_embeddings:
+        mode !== "live" && !many && people
+          ? picked.map((i) => people[i].embedding)
+          : [],
       mirror,
       occlusion,
       virtual_camera: mode === "live" && virtualCamera,
@@ -766,6 +783,45 @@ function App() {
                   </span>
                   <Plus size={17} />
                 </button>
+              )}
+              {mode !== "live" && people && people.length > 1 && (
+                <div className="people">
+                  <span className="select-label">
+                    {mode === "video" ? "Videodaki kişiler" : "Fotoğraftaki kişiler"}
+                  </span>
+                  <div className="people-grid">
+                    {people.map((person, i) => (
+                      <button
+                        key={i}
+                        className={`person ${picked.includes(i) ? "picked" : ""}`}
+                        aria-pressed={picked.includes(i)}
+                        aria-label={`Kişi ${i + 1}`}
+                        disabled={busy || many}
+                        onClick={() =>
+                          setPicked((current) =>
+                            current.includes(i)
+                              ? current.filter((x) => x !== i)
+                              : [...current, i],
+                          )
+                        }
+                      >
+                        <img src={`data:image/jpeg;base64,${person.image}`} alt="" />
+                        {picked.includes(i) && (
+                          <span className="person-check">
+                            <Check size={12} />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="small-note">
+                    {many
+                      ? "“Tüm yüzleri değiştir” açıkken herkes değiştirilir."
+                      : picked.length
+                        ? "Yalnızca seçtiğiniz kişiler değiştirilir; kişi kadrajda yer değiştirse de takip edilir."
+                        : "Değiştirilecek kişiyi seçin. Seçmezseniz her karede en soldaki yüz değiştirilir."}
+                  </p>
+                </div>
               )}
             </section>
             <section className="card settings-card">
