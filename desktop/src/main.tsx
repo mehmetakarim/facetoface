@@ -453,11 +453,9 @@ function App() {
       provider,
       many_faces: many,
       target_embeddings:
-        mode !== "live" && !many && people
-          ? picked.map((i) => people[i].embedding)
-          : [],
+        !many && people ? picked.map((i) => people[i].embedding) : [],
       target_sources:
-        mode !== "live" && !many && people
+        !many && people
           ? picked.map((i) => personSources[i]?.path ?? null)
           : [],
       mirror,
@@ -687,7 +685,13 @@ function App() {
                     id="camera"
                     disabled={busy}
                     value={camera}
-                    onChange={(e) => setCamera(Number(e.target.value))}
+                    onChange={(e) => {
+                      setCamera(Number(e.target.value));
+                      // People found with another camera do not apply.
+                      setPeople(undefined);
+                      setPicked([]);
+                      setPersonSources({});
+                    }}
                   >
                     {cameras?.length
                       ? cameras.map((c) => (
@@ -708,6 +712,16 @@ function App() {
                     onClick={() => launch({ mode: "cameras" })}
                   >
                     <RefreshCw size={14} /> Kameraları yenile
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={busy || !native}
+                    onClick={() => {
+                      setPeople(undefined);
+                      launch({ mode: "target_faces", camera });
+                    }}
+                  >
+                    <ScanFace size={14} /> Kadrajdaki kişileri bul
                   </button>
                   {(windows || macos) && (
                     <label className="toggle-row">
@@ -812,10 +826,16 @@ function App() {
                   <Plus size={17} />
                 </button>
               )}
-              {mode !== "live" && people && people.length > 1 && (
+              {people &&
+                // A live scan with one person is still useful: others may join later.
+                people.length > (mode === "live" ? 0 : 1) && (
                 <div className="people">
                   <span className="select-label">
-                    {mode === "video" ? "Videodaki kişiler" : "Fotoğraftaki kişiler"}
+                    {mode === "live"
+                      ? "Kadrajdaki kişiler"
+                      : mode === "video"
+                        ? "Videodaki kişiler"
+                        : "Fotoğraftaki kişiler"}
                   </span>
                   <div className="people-grid">
                     {people.map((person, i) => (
@@ -880,7 +900,9 @@ function App() {
                       ? "“Tüm yüzleri değiştir” açıkken herkes değiştirilir."
                       : picked.length
                         ? "Yalnızca seçtiğiniz kişiler değiştirilir; kişiler kadrajda yer değiştirse de takip edilir. Kişiye özel kaynak seçmezseniz ana kaynak yüz kullanılır."
-                        : "Değiştirilecek kişiyi seçin. Seçmezseniz her karede en soldaki yüz değiştirilir."}
+                        : mode === "live"
+                          ? "Değiştirilecek kişiyi seçin; kadraja sonradan giren diğer kişiler değiştirilmez. Seçmezseniz en soldaki yüz değiştirilir."
+                          : "Değiştirilecek kişiyi seçin. Seçmezseniz her karede en soldaki yüz değiştirilir."}
                   </p>
                 </div>
               )}

@@ -158,12 +158,40 @@ def sample_frames(target, samples=48):
     return frames
 
 
-def find_people(target, detect, recognizer):
+def sample_camera(index, seconds=3.0, step=3):
+    """A few seconds of the live camera; the job releases it before the live view starts."""
+    import cv2
+    cap = cv2.VideoCapture(index, camera_api(cv2))
+    frames = []
+    try:
+        if not cap.isOpened():
+            raise ValueError('Kamera açılamadı. Kamera seçimini ve izinlerini kontrol edin; kamerayı kullanan başka bir uygulama varsa kapatın.')
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        phase('Kadraj taranıyor; birkaç saniye kameraya bakın…')
+        for _ in range(10):  # let exposure settle; first frames are often dark
+            cap.read()
+        until, index = time.monotonic() + seconds, 0
+        while time.monotonic() < until:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            if index % step == 0:
+                frames.append(frame)
+            index += 1
+    finally:
+        cap.release()
+    if not frames:
+        raise ValueError('Kamera görüntüsü alınamadı. Kamera bağlantısını kontrol edin.')
+    return frames
+
+
+def find_people(frames, detect, recognizer, live=False):
     import numpy as np
     from engine.people import group
     phase('Hedefteki kişiler aranıyor…')
     faces = []
-    for frame in sample_frames(target):
+    for frame in frames:
         for face in detect(frame):
             x0, y0, x1, y1 = face.bbox
             if min(x1 - x0, y1 - y0) < 32:  # too small to recognise reliably
@@ -175,7 +203,8 @@ def find_people(target, detect, recognizer):
     emit('target_faces',
          people=[{'count': p['count'], 'image': p['thumbnail'],
                   'embedding': [round(float(v), 5) for v in p['center']]} for p in people],
-         message=f'Hedefte {len(people)} kişi bulundu.' if people else 'Hedefte yüz bulunamadı.')
+         message=(f'Kadrajda {len(people)} kişi bulundu.' if people else 'Kadrajda yüz bulunamadı.') if live
+         else (f'Hedefte {len(people)} kişi bulundu.' if people else 'Hedefte yüz bulunamadı.'))
 
 
 def run(config):
@@ -248,7 +277,9 @@ def run(config):
         return model
 
     if config['mode'] == 'target_faces':
-        find_people(config['target'], detect, load_recognizer())
+        live = not config.get('target')
+        frames = sample_camera(config.get('camera', 0)) if live else sample_frames(config['target'])
+        find_people(frames, detect, load_recognizer(), live)
         return
     source_image = cv2.imdecode(np.fromfile(config['source'], dtype=np.uint8), cv2.IMREAD_COLOR)
     if source_image is None:

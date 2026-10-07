@@ -67,6 +67,12 @@ class SelectionProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate({'mode': 'target_faces', 'target': self.config['source'] + '.txt'})
 
+    def test_camera_scan_needs_a_valid_camera(self):
+        self.assertEqual(validate({'mode': 'target_faces', 'camera': 1}), {'mode': 'target_faces', 'camera': 1})
+        for camera in [-1, 10, '0']:
+            with self.subTest(camera=camera), self.assertRaises(ValueError):
+                validate({'mode': 'target_faces', 'camera': camera})
+
     def test_selected_embeddings_are_validated(self):
         self.assertTrue(validate({**self.config, 'target_embeddings': [[0.0] * 512]}))
         for bad in ['x', [[0.0] * 511], [['a'] * 512], [[0.0] * 512] * 9]:

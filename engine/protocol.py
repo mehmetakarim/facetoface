@@ -8,6 +8,12 @@ EMBEDDING_SIZE = 512  # w600k_r50 output
 MAX_SELECTED_FACES = 8
 
 
+def validate_camera(config):
+    camera = config.get('camera', 0)
+    if type(camera) is not int or not 0 <= camera <= 9:
+        raise ValueError('Kamera numarası 0 ile 9 arasında olmalıdır.')
+
+
 def validate(config):
     mode = config.get('mode')
     if mode not in {'diagnostics', 'cameras', 'target_faces', 'source', 'image', 'video', 'live'}:
@@ -15,8 +21,11 @@ def validate(config):
     if mode in {'diagnostics', 'cameras'}:
         return config
     if mode == 'target_faces':
-        # Finds the people in a target before any source is chosen.
-        target = Path(config.get('target') or '')
+        # Finds the people in a target file, or in the camera when no target is given.
+        if not config.get('target'):
+            validate_camera(config)
+            return config
+        target = Path(config['target'])
         if not target.is_file() or target.suffix.lower() not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
             raise ValueError('Kişileri bulmak için geçerli bir fotoğraf veya video seçin.')
         return config
@@ -43,9 +52,7 @@ def validate(config):
     if type(config.get('virtual_camera', False)) is not bool:
         raise ValueError('Geçersiz sanal kamera ayarı.')
     if mode == 'live':
-        camera = config.get('camera', 0)
-        if type(camera) is not int or not 0 <= camera <= 9:
-            raise ValueError('Kamera numarası 0 ile 9 arasında olmalıdır.')
+        validate_camera(config)
     if mode in {'image', 'video'}:
         target = Path(config.get('target') or '')
         allowed = IMAGE_EXTENSIONS if mode == 'image' else VIDEO_EXTENSIONS
