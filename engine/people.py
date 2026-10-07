@@ -31,14 +31,23 @@ def group(faces):
     return sorted(people, key=lambda person: -person['count'])
 
 
-def choose(found, selected, threshold=MATCH):
-    """Indices of detected faces to swap: for each chosen person, their best match in the frame."""
+def assign(found, selected, threshold=MATCH):
+    """(face index, person index) pairs: each chosen person's best match in the frame.
+
+    A face claimed by two chosen people goes to the one it resembles most, so two
+    look-alikes never share one source.
+    """
     if not len(found) or not len(selected):
         return []
     similarity = np.asarray(selected, np.float32) @ np.asarray(found, np.float32).T
-    picks = set()
-    for row in similarity:
-        index = int(row.argmax())
-        if row[index] >= threshold:
-            picks.add(index)
-    return sorted(picks)
+    owner = {}
+    for person, row in enumerate(similarity):
+        face = int(row.argmax())
+        if row[face] >= threshold and (face not in owner or row[face] > similarity[owner[face], face]):
+            owner[face] = person
+    return sorted(owner.items())
+
+
+def choose(found, selected, threshold=MATCH):
+    """Indices of detected faces to swap."""
+    return [face for face, _ in assign(found, selected, threshold)]

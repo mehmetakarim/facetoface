@@ -99,6 +99,10 @@ function App() {
   // People found in the target; picked holds their indices.
   const [people, setPeople] = useState<Person[]>();
   const [picked, setPicked] = useState<number[]>([]);
+  // Optional source photo per person index; others use the main source.
+  const [personSources, setPersonSources] = useState<
+    Record<number, { path: string; image: string }>
+  >({});
   const [mirror, setMirror] = useState(true);
   const [occlusion, setOcclusion] = useState(
     () => stored("occlusion", "on", ["on", "off"]) === "on",
@@ -179,6 +183,7 @@ function App() {
       if (e.type === "target_faces") {
         setPeople(e.people || []);
         setPicked([]);
+        setPersonSources({});
       }
       if (e.type === "error") setError(e.message || "İşlem tamamlanamadı.");
       if (["exit", "stopped"].includes(e.type)) {
@@ -343,8 +348,26 @@ function App() {
         setTargetImage(image);
         setPeople(undefined);
         setPicked([]);
+        setPersonSources({});
         await launch({ mode: "target_faces", target: path });
       }
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function choosePersonSource(index: number) {
+    if (busyRef.current || !native) return;
+    try {
+      const path = await open({
+        multiple: false,
+        title: `${index + 1}. kişi için kaynak yüz fotoğrafını seçin`,
+        filters: [
+          { name: "Fotoğraf", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] },
+        ],
+      });
+      if (!path) return;
+      const image = await invoke<string>("image_data", { path });
+      setPersonSources((current) => ({ ...current, [index]: { path, image } }));
     } catch (e) {
       setError(String(e));
     }
@@ -375,6 +398,7 @@ function App() {
     setTargetImage("");
     setPeople(undefined);
     setPicked([]);
+    setPersonSources({});
     setResult("");
     setOutput("");
     setError("");
@@ -431,6 +455,10 @@ function App() {
       target_embeddings:
         mode !== "live" && !many && people
           ? picked.map((i) => people[i].embedding)
+          : [],
+      target_sources:
+        mode !== "live" && !many && people
+          ? picked.map((i) => personSources[i]?.path ?? null)
           : [],
       mirror,
       occlusion,
@@ -791,8 +819,8 @@ function App() {
                   </span>
                   <div className="people-grid">
                     {people.map((person, i) => (
+                      <div className="person-slot" key={i}>
                       <button
-                        key={i}
                         className={`person ${picked.includes(i) ? "picked" : ""}`}
                         aria-pressed={picked.includes(i)}
                         aria-label={`Kişi ${i + 1}`}
@@ -812,13 +840,46 @@ function App() {
                           </span>
                         )}
                       </button>
+                      {picked.includes(i) && !many && (
+                        <div className="person-source">
+                          <button
+                            disabled={busy || !native}
+                            title={
+                              personSources[i]
+                                ? name(personSources[i].path)
+                                : "Bu kişi için ayrı bir kaynak yüz seçin"
+                            }
+                            onClick={() => choosePersonSource(i)}
+                          >
+                            {personSources[i] ? (
+                              <img src={personSources[i].image} alt="" />
+                            ) : (
+                              <Plus size={11} />
+                            )}
+                            Kaynak
+                          </button>
+                          {personSources[i] && (
+                            <button
+                              aria-label="Ana kaynağa dön"
+                              title="Ana kaynağa dön"
+                              disabled={busy}
+                              onClick={() =>
+                                setPersonSources(({ [i]: _, ...rest }) => rest)
+                              }
+                            >
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      </div>
                     ))}
                   </div>
                   <p className="small-note">
                     {many
                       ? "“Tüm yüzleri değiştir” açıkken herkes değiştirilir."
                       : picked.length
-                        ? "Yalnızca seçtiğiniz kişiler değiştirilir; kişi kadrajda yer değiştirse de takip edilir."
+                        ? "Yalnızca seçtiğiniz kişiler değiştirilir; kişiler kadrajda yer değiştirse de takip edilir. Kişiye özel kaynak seçmezseniz ana kaynak yüz kullanılır."
                         : "Değiştirilecek kişiyi seçin. Seçmezseniz her karede en soldaki yüz değiştirilir."}
                   </p>
                 </div>

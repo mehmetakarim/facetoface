@@ -265,9 +265,25 @@ def run(config):
     recognizer.get(source_image, source)
     # Chosen people are recognised in every frame; otherwise the model is not needed.
     targets = None if config.get('many_faces', False) else config.get('target_embeddings') or None
+    person_sources = None
     if targets:
         targets = np.asarray(targets, np.float32)
         targets /= np.linalg.norm(targets, axis=1, keepdims=True)
+        # Each chosen person may have their own source photo; None means the main one.
+        prepared, person_sources = {}, []
+        for number, path in enumerate(config.get('target_sources') or [None] * len(targets), 1):
+            if path is None:
+                person_sources.append(source)
+                continue
+            if path not in prepared:
+                image = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
+                candidates = detect(image) if image is not None else []
+                if not candidates:
+                    raise ValueError(f'{number}. kişi için seçilen fotoğrafta yüz bulunamadı. Yüzün net göründüğü bir fotoğraf seçin.')
+                face = max(candidates, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                recognizer.get(image, face)
+                prepared[path] = face
+            person_sources.append(prepared[path])
     else:
         recognizer = None
     if not model_path.is_file():
@@ -333,18 +349,18 @@ def run(config):
         # Only the source needs a recognition embedding. Target faces need landmarks.
         found = detect(frame)
         if config.get('many_faces', False):
-            selected = found
+            pairs = [(face, source) for face in found]
         elif targets is not None:
-            from engine.people import choose
+            from engine.people import assign
             for face in found:
                 recognizer.get(frame, face)
-            selected = [found[i] for i in choose([f.normed_embedding for f in found], targets)]
+            pairs = [(found[i], person_sources[p]) for i, p in assign([f.normed_embedding for f in found], targets)]
         else:
-            selected = sorted(found, key=lambda f: f.bbox[0])[:1]
-        for target_face in selected:
-            fake, M = swapper.get(frame, target_face, source, paste_back=False)
+            pairs = [(face, source) for face in sorted(found, key=lambda f: f.bbox[0])[:1]]
+        for target_face, face_source in pairs:
+            fake, M = swapper.get(frame, target_face, face_source, paste_back=False)
             frame = blender.paste(frame, fake, M)
-        return frame, len(selected)
+        return frame, len(pairs)
 
     mode = config['mode']
     if mode == 'image':

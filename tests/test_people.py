@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from engine.people import choose, group
+from engine.people import assign, choose, group
 from engine.protocol import validate
 
 
@@ -34,6 +34,17 @@ class PeopleTests(unittest.TestCase):
         self.assertEqual(choose(frame_swapped, [alice]), [1])
         self.assertEqual(choose(frame_swapped, [alice, bob]), [0, 1])
 
+    def test_each_face_is_assigned_to_its_own_person(self):
+        alice, bob = identity(1), identity(2)
+        frame = [identity(8, 0.7, bob), identity(9, 0.7, alice)]
+        self.assertEqual(assign(frame, [alice, bob]), [(0, 1), (1, 0)])
+
+    def test_a_shared_best_match_goes_to_the_closest_person(self):
+        alice = identity(1)
+        twin = identity(11, 0.4, alice)  # looks like Alice, not present in the frame
+        frame = [identity(12, 0.5, alice)]
+        self.assertEqual(assign(frame, [twin, alice]), [(0, 1)])
+
     def test_absent_person_is_not_replaced_by_someone_else(self):
         alice, bob = identity(1), identity(2)
         self.assertEqual(choose([identity(7, 0.7, bob)], [alice]), [])
@@ -61,6 +72,13 @@ class SelectionProtocolTests(unittest.TestCase):
         for bad in ['x', [[0.0] * 511], [['a'] * 512], [[0.0] * 512] * 9]:
             with self.subTest(bad=str(bad)[:20]), self.assertRaises(ValueError):
                 validate({**self.config, 'target_embeddings': bad})
+
+    def test_per_person_sources_are_validated(self):
+        one = {**self.config, 'target_embeddings': [[0.0] * 512, [0.0] * 512]}
+        self.assertTrue(validate({**one, 'target_sources': [None, self.config['source']]}))
+        for bad in [[None], [None, 'eksik.jpg'], [None, self.config['target']], 'x']:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate({**one, 'target_sources': bad})
 
 
 if __name__ == '__main__':

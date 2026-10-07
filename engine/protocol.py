@@ -25,6 +25,14 @@ def validate(config):
             or any(type(e) is not list or len(e) != EMBEDDING_SIZE
                    or not all(type(v) in (int, float) for v in e) for e in selected)):
         raise ValueError('Geçersiz kişi seçimi. Hedefteki kişileri yeniden bulun.')
+    # Optional per-person source photos, aligned with target_embeddings; None = main source.
+    sources = config.get('target_sources', [])
+    if type(sources) is not list or (sources and len(sources) != len(selected)):
+        raise ValueError('Geçersiz kişi seçimi. Hedefteki kişileri yeniden bulun.')
+    for number, path in enumerate(sources, 1):
+        if path is not None and (type(path) is not str or not Path(path).is_file()
+                                 or Path(path).suffix.lower() not in IMAGE_EXTENSIONS):
+            raise ValueError(f'{number}. kişi için geçerli bir kaynak fotoğraf seçin.')
     source = Path(config.get('source') or '')
     if not source.is_file() or source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError('Kaynak yüz için geçerli bir fotoğraf seçin.')
