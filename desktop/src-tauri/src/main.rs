@@ -24,6 +24,9 @@ struct Job {
     dir: PathBuf,
     terminal: bool,
     reader_done: bool,
+    /// Recording live jobs are asked to finish so their MP4 is closed properly.
+    graceful: bool,
+    stopping: Option<Instant>,
 }
 #[derive(Default)]
 struct Engine {
@@ -258,6 +261,9 @@ async fn start_job(
         dir,
         terminal: false,
         reader_done: false,
+        graceful: config["mode"] == "live"
+            && config["output"].as_str().is_some_and(|o| !o.is_empty()),
+        stopping: None,
     });
     drop(guard);
     let job_state = engine.job.clone();
@@ -332,6 +338,14 @@ async fn start_job(
                     json!({"type":"error","message":"Motorun durumu okunamadı. İşlem durduruldu."}),
                 );
             }
+            Ok(None) if job.stopping.is_some_and(|t| t.elapsed() > Duration::from_secs(15)) => {
+                terminate(job);
+                send(
+                    &app,
+                    &job_id,
+                    json!({"type":"error","message":"Kayıt zamanında tamamlanamadı; işlem durduruldu."}),
+                );
+            }
             Ok(None) if job.last.elapsed() > job.deadline => {
                 terminate(job);
                 send(
@@ -355,6 +369,19 @@ async fn stop_job(app: tauri::AppHandle, engine: State<'_, Engine>) -> Result<()
         .job
         .lock()
         .map_err(|_| "Motor durumuna erişilemedi.")?;
+    // First press on a recording: let the engine close the file (the monitor still
+    // enforces a time limit). A second press, or any other job, stops at once.
+    if let Some(job) = state.as_mut().filter(|j| j.graceful && j.stopping.is_none()) {
+        if fs::write(job.dir.join("stop"), b"").is_ok() {
+            job.stopping = Some(Instant::now());
+            send(
+                &app,
+                &job.id,
+                json!({"type":"status","message":"Kayıt tamamlanıyor… Hemen durdurmak için yeniden basın."}),
+            );
+            return Ok(());
+        }
+    }
     if let Some(mut job) = state.take() {
         terminate(&mut job);
         let _ = fs::remove_dir_all(&job.dir);
@@ -446,6 +473,8 @@ mod tests {
             dir: PathBuf::new(),
             terminal: false,
             reader_done: false,
+            graceful: false,
+            stopping: None,
         };
         let started = Instant::now();
         terminate(&mut job);
@@ -469,6 +498,8 @@ mod tests {
             dir: PathBuf::new(),
             terminal: false,
             reader_done: false,
+            graceful: false,
+            stopping: None,
         };
         let started = Instant::now();
         terminate(&mut job);

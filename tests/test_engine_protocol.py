@@ -37,6 +37,20 @@ class ProtocolTests(unittest.TestCase):
         for camera in [-1, 10, '0', True]:
             with self.subTest(camera=camera), self.assertRaises(ValueError):
                 validate(dict(mode='live', source=str(self.source), camera=camera))
+    def test_live_recording_output_is_optional_and_checked(self):
+        live = dict(mode='live', source=str(self.source), camera=0)
+        self.assertEqual(validate(live), live)
+        self.assertTrue(validate({**live, 'output': str(self.root / 'kayit.mp4')}))
+        (self.root / 'var.mp4').write_bytes(b'keep')
+        for output in [str(self.root / 'kayit.png'), str(self.root / 'var.mp4'), str(self.source), '']:
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                validate({**live, 'output': output})
+    def test_camera_size_is_one_of_the_offered_sizes(self):
+        live = dict(mode='live', source=str(self.source))
+        self.assertTrue(validate({**live, 'camera_size': [1280, 720]}))
+        for size in [[1000, 700], '1280x720', [1280]]:
+            with self.subTest(size=size), self.assertRaises(ValueError):
+                validate({**live, 'camera_size': size})
     def test_wrong_output_format(self):
         with self.assertRaises(ValueError): validate({**self.config, 'output': str(self.root / 'bad.mp4')})
     def test_protocol_keeps_turkish_and_single_line(self):

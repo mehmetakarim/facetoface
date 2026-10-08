@@ -29,7 +29,7 @@ ROOT = Path(os.environ.get('DLC_PROJECT_ROOT', Path(__file__).resolve().parents[
 SUBPROCESS_FLAGS = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
 STARTED_AT = time.monotonic()
 sys.path.insert(0, str(ROOT))
-from engine.protocol import validate, encode, IMAGE_EXTENSIONS, MAX_SELECTED_FACES
+from engine.protocol import validate, encode, CAMERA_SIZES, IMAGE_EXTENSIONS, MAX_SELECTED_FACES
 from engine.output import publish
 
 # Keep an independent descriptor so C/C++ logs cannot corrupt JSON messages.
@@ -44,6 +44,34 @@ def emit(kind, **data):
 
 def phase(message):
     emit('status', message=message)
+
+
+class FakeCamera:
+    """Test stand-in for a camera: replays a video file in real time, then ends."""
+
+    def __init__(self, path):
+        import cv2
+        self.cap = cv2.VideoCapture(path)
+        rate = self.cap.get(cv2.CAP_PROP_FPS)
+        self.interval = 1 / rate if 0 < rate <= 240 else 1 / 30
+        self.next = time.monotonic()
+
+    def isOpened(self):
+        return self.cap.isOpened()
+
+    def set(self, prop, value):
+        return True
+
+    def get(self, prop):
+        return self.cap.get(prop)
+
+    def read(self):
+        time.sleep(max(0.0, self.next - time.monotonic()))
+        self.next += self.interval
+        return self.cap.read()
+
+    def release(self):
+        self.cap.release()
 
 
 class LatestFrameReader:
@@ -84,6 +112,17 @@ class LatestFrameReader:
         self.cap.release()
 
 
+def find_ffmpeg():
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg:
+        try:
+            import imageio_ffmpeg
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except (ImportError, RuntimeError):
+            ffmpeg = None
+    return ffmpeg
+
+
 def camera_api(cv2):
     # This OpenCV build cannot open devices through Media Foundation, and CAP_ANY
     # falls back to DirectShow anyway. Using it explicitly keeps the listed order
@@ -108,7 +147,9 @@ def list_cameras():
             name = info.name if seen[info.name] == 1 else f'{info.name} ({seen[info.name]})'
             cameras.append({'index': info.index, 'name': name})
     from engine.virtualcam import status
-    emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9], **status())
+    from engine.audio import list_microphones
+    emit('cameras', cameras=[c for c in cameras if 0 <= c['index'] <= 9],
+         microphones=list_microphones(find_ffmpeg()), **status())
 
 
 def thumbnail(frame, bbox, size=112):
@@ -229,13 +270,7 @@ def run(config):
     analysis_dir = ROOT / 'models' / 'buffalo_l'
     if not analysis_dir.is_dir():
         analysis_dir = Path.home() / '.insightface' / 'models' / 'buffalo_l'
-    ffmpeg = shutil.which('ffmpeg')
-    if not ffmpeg:
-        try:
-            import imageio_ffmpeg
-            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-        except (ImportError, RuntimeError):
-            ffmpeg = None
+    ffmpeg = find_ffmpeg()
     if config['mode'] == 'diagnostics':
         from engine.virtualcam import installed as virtualcam_installed, native_installed, mac_bridge_available
         if config.get('check_inference'):
@@ -343,11 +378,9 @@ def run(config):
         providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance', 'device_filter': 'gpu'}),
                      'CPUExecutionProvider']
     swapper = get_model(str(model_path), providers=providers, sess_options=swap_opts)
-    if recognizer is not None and provider == 'directml':
-        try:
-            recognizer = load_recognizer(providers, swap_opts)
-        except Exception:  # keep the CPU session; recognition is only slower there
-            traceback.print_exc(file=sys.stderr)
+    # The recognizer stays on the CPU: it runs on the analysis thread while the swap
+    # runs on the GPU, and DirectML crashes the process when two threads use it at
+    # once. The tracker makes recognition rare, so the CPU is fast enough.
     from engine.blend import Blender, Occluder
     occluder = None
     if config.get('occlusion', True):
@@ -381,9 +414,16 @@ def run(config):
     tracker = Tracker(targets) if targets is not None else None
     previous_frame = None
 
-    def transform(frame):
+    # Steadies landmarks and masks between frames; a single photo has no previous frame.
+    from engine.stabilize import Stabilizer
+    stabilizer = Stabilizer() if config['mode'] != 'image' else None
+
+    def analyze(frame):
+        """CPU side: find faces and decide who gets which source."""
         # Only the source needs a recognition embedding. Target faces need landmarks.
         found = detect(frame)
+        states = stabilizer.landmarks(found) if stabilizer is not None else [None] * len(found)
+        state_of = {id(face): state for face, state in zip(found, states)}
         if config.get('many_faces', False):
             pairs = [(face, source) for face in found]
         elif targets is not None:
@@ -400,10 +440,18 @@ def run(config):
             pairs = [(found[i], person_sources[p]) for i, p in tracker.assign(found, embed)]
         else:
             pairs = [(face, source) for face in sorted(found, key=lambda f: f.bbox[0])[:1]]
-        for target_face, face_source in pairs:
+        return [(face, face_source, state_of[id(face)]) for face, face_source in pairs]
+
+    def render(frame, pairs):
+        """GPU side: generate and paste the faces chosen by analyze()."""
+        for target_face, face_source, state in pairs:
             fake, M = swapper.get(frame, target_face, face_source, paste_back=False)
-            frame = blender.paste(frame, fake, M)
+            smooth = (lambda mask, state=state: stabilizer.mask(state, mask)) if state is not None else None
+            frame = blender.paste(frame, fake, M, smooth)
         return frame, len(pairs)
+
+    def transform(frame):
+        return render(frame, analyze(frame))
 
     mode = config['mode']
     if mode == 'image':
@@ -425,7 +473,20 @@ def run(config):
 
     if mode == 'video' and not ffmpeg:
         raise ValueError('Video işlemek için FFmpeg kurulmalıdır.')
-    cap = cv2.VideoCapture(config.get('camera', 0), camera_api(cv2)) if mode == 'live' else cv2.VideoCapture(config['target'])
+    recording = mode == 'live' and bool(config.get('output'))
+    if recording and not ffmpeg:
+        raise ValueError('Canlı görüntüyü kaydetmek için FFmpeg kurulmalıdır.')
+    # The supervisor asks a recording live job to finish by creating this file,
+    # so the MP4 is closed properly instead of being cut off by a kill.
+    stop_file = Path(os.environ['DLC_JOB_DIR']) / 'stop' if os.environ.get('DLC_JOB_DIR') else None
+    record_fps, written, record_start, camera_lost = 30, 0, 0.0, False
+    microphone, microphone_warned = None, False
+    if mode == 'live':
+        # Tests replay a file instead of opening a real camera.
+        fake = os.environ.get('DLC_FAKE_CAMERA')
+        cap = FakeCamera(fake) if fake else cv2.VideoCapture(config.get('camera', 0), camera_api(cv2))
+    else:
+        cap = cv2.VideoCapture(config['target'])
     encoder = None
     temp_dir = None
     virtual_camera = None
@@ -433,13 +494,18 @@ def run(config):
         if not cap.isOpened():
             raise ValueError('Kamera açılamadı. Kamera numarasını ve kamera izinlerini kontrol edin.' if mode == 'live' else 'Video açılamadı. Dosya biçimini kontrol edin.')
         if mode == 'live':
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            width, height = config.get('camera_size') or CAMERA_SIZES[1]
+            if sys.platform == 'win32':
+                # DirectShow delivers HD at full frame rate only as MJPG; YUY2 drops to ~5 fps.
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            actual = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             # Drivers often ignore BUFFERSIZE; draining on a thread keeps processing
             # on the newest frame instead of a growing backlog.
             cap = LatestFrameReader(cap)
-            phase('Kamera açık. Canlı görüntü işleniyor.')
+            phase(f'Kamera açık ({actual[0]}×{actual[1]}). Canlı görüntü işleniyor.')
         else:
             phase('Video işleniyor…')
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -447,34 +513,105 @@ def run(config):
         total = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))) if mode == 'video' else 0
         frames = 0
         start = time.monotonic()
+        # Two stages: a thread reads and analyses the next frame (CPU detection,
+        # recognition) while this thread renders the current one (GPU swap, mask,
+        # outputs). ONNX Runtime releases the GIL, so both really run at once.
+        import queue
+        import threading
+        handoff = queue.Queue(maxsize=2)
+        halt = threading.Event()
+
+        def deliver(item):
+            while not halt.is_set():
+                try:
+                    handoff.put(item, timeout=0.1)
+                    return
+                except queue.Full:
+                    continue
+
+        def produce():
+            try:
+                while not halt.is_set():
+                    if mode == 'live' and stop_file is not None and stop_file.exists():
+                        return deliver(('stop', None))
+                    ok, frame = cap.read()
+                    if not ok:
+                        return deliver(('end', None))
+                    if mode == 'live' and config.get('mirror', True):
+                        frame = cv2.flip(frame, 1)
+                    deliver(('frame', (frame, analyze(frame))))
+            except BaseException as error:  # surfaced on the main thread
+                deliver(('error', error))
+
+        producer = threading.Thread(target=produce, daemon=True)
+        producer.start()
         while True:
-            ok, frame = cap.read()
-            if not ok:
+            kind, item = handoff.get()
+            if kind == 'error':
+                raise item
+            if kind == 'stop':
+                break
+            if kind == 'end':
+                if recording and encoder is not None:
+                    camera_lost = True  # keep what was recorded so far
+                    break
                 if mode == 'live':
                     raise ValueError('Kamera görüntüsü kesildi. Bağlantıyı kontrol edip yeniden başlatın.')
                 break
-            if mode == 'live' and config.get('mirror', True):
-                frame = cv2.flip(frame, 1)
-            frame, count = transform(frame)
+            frame, count = render(*item)
             frames += 1
+            # The mirror is only for the local preview; outputs carry the true image.
+            true_frame = cv2.flip(frame, 1) if mode == 'live' and config.get('mirror', True) else frame
             if mode == 'live' and config.get('virtual_camera'):
                 if virtual_camera is None:
                     from engine.virtualcam import open_camera
                     virtual_camera = open_camera(frame.shape[1], frame.shape[0])
                     phase(f'Sanal kamera açık. Görüntülü görüşmede "{virtual_camera.name}" kamerasını seçin.')
                 # Meeting apps mirror their own self-view; others must see the true image.
-                virtual_camera.send(cv2.flip(frame, 1) if config.get('mirror', True) else frame)
-            if mode == 'video':
+                virtual_camera.send(true_frame)
+            if mode == 'video' or recording:
                 if encoder is None:
                     # Same-volume temporary output; removed even when the process is killed by supervisor.
                     temp_dir = tempfile.TemporaryDirectory(prefix='yuz-atolyesi-', dir=os.environ.get('DLC_JOB_DIR'))
                     video_path = Path(temp_dir.name) / 'silent.mp4'
                     h, w = frame.shape[:2]
-                    encoder = subprocess.Popen([ffmpeg, '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps), '-i', '-', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', str(video_path)], stdin=subprocess.PIPE, **SUBPROCESS_FLAGS)
-                encoder.stdin.write(frame.tobytes())
+                    encoder = subprocess.Popen([ffmpeg, '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(record_fps if recording else fps), '-i', '-', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(video_path)], stdin=subprocess.PIPE, **SUBPROCESS_FLAGS)
+                    record_start = time.monotonic()
+                    if recording and config.get('microphone'):
+                        from engine.audio import Microphone
+                        microphone = Microphone(ffmpeg, config['microphone'], Path(temp_dir.name) / 'audio.m4a')
+                if microphone is not None and not microphone_warned and microphone.failed():
+                    microphone_warned = True
+                    phase('Mikrofon açılamadı; kayıt sessiz devam ediyor. Mikrofon iznini ve seçimini kontrol edin.')
+                if recording:
+                    # The engine runs slower than 30 fps and unevenly; repeating frames keeps
+                    # the recording in real time (capped so a stall does not flood the encoder).
+                    due = min(int((time.monotonic() - record_start) * record_fps) + 1 - written, record_fps)
+                    for _ in range(max(due, 0)):
+                        encoder.stdin.write(true_frame.tobytes())
+                    written += max(due, 0)
+                else:
+                    encoder.stdin.write(frame.tobytes())
             preview(frame, fps=round(frames / max(0.01, time.monotonic() - start), 1), progress=min(99, round(frames / total * 100, 1)) if total else None, faces=count)
-        if not frames:
+        if not frames and mode == 'video':
             raise ValueError('Videoda okunabilir kare bulunamadı.')
+        if recording and encoder is not None:
+            phase('Canlı kayıt kaydediliyor…')
+            encoder.stdin.close()
+            if encoder.wait(timeout=90) != 0:
+                raise ValueError('Canlı kayıt kodlanamadı. Diskte yeterli boş alan olduğundan emin olun.')
+            message = 'Canlı kayıt kaydedildi.'
+            if microphone is not None:
+                from engine.audio import join
+                joined = Path(temp_dir.name) / 'result.mp4'
+                if microphone.stop() and join(ffmpeg, video_path, microphone.path, microphone.started, record_start, joined):
+                    video_path = joined
+                else:
+                    message = 'Canlı kayıt sessiz kaydedildi; mikrofon sesi alınamadı.'
+            publish(config['output'], source=video_path)
+            emit('complete', output=config['output'], message=message)
+            if camera_lost:
+                raise ValueError('Kamera görüntüsü kesildi; o ana kadarki kayıt kaydedildi.')
         if mode == 'video':
             phase('Video kaydediliyor ve özgün ses ekleniyor…')
             encoder.stdin.close()
@@ -487,9 +624,14 @@ def run(config):
             publish(config['output'], source=merged_path)
             emit('complete', output=config['output'], message='Video kaydedildi.')
     finally:
+        if 'halt' in locals():
+            halt.set()
+            producer.join(timeout=5)
         cap.release()
         if virtual_camera is not None:
             virtual_camera.close()
+        if microphone is not None:
+            microphone.kill()
         if encoder is not None and encoder.poll() is None:
             encoder.kill()
             encoder.wait()

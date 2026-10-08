@@ -48,13 +48,15 @@ class Blender:
         self.occluder = occluder
         self.boxes = {}
 
-    def paste(self, frame, fake, M):
+    def paste(self, frame, fake, M, smooth=None):
+        """smooth(mask) may blend the occlusion mask with the face's previous one."""
         size = fake.shape[0]
         if size not in self.boxes:
             self.boxes[size] = _box_mask(size)
         mask = self.boxes[size]
         if self.occluder is not None:
-            mask = mask * self.occluder.mask(frame, M, fake)
+            occlusion = self.occluder.mask(frame, M, fake)
+            mask = mask * (smooth(occlusion) if smooth is not None else occlusion)
         # Work only inside the face's bounding box instead of warping the full frame.
         IM = cv2.invertAffineTransform(M)
         corners = np.array([[0, 0, 1], [size, 0, 1], [0, size, 1], [size, size, 1]], np.float32) @ IM.T

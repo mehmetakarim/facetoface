@@ -42,6 +42,7 @@ type EngineEvent = {
   occlusion_model?: boolean;
   virtual_camera?: boolean;
   cameras?: { index: number; name: string }[];
+  microphones?: { id: string; name: string }[];
   native_available?: boolean;
   native_camera?: boolean;
   obs_camera?: boolean;
@@ -111,6 +112,14 @@ function App() {
   useEffect(() => remember("occlusion", occlusion ? "on" : "off"), [occlusion]);
   const [camera, setCamera] = useState(0);
   const [virtualCamera, setVirtualCamera] = useState(false);
+  const [record, setRecord] = useState(false);
+  const [cameraSize, setCameraSize] = useState(() =>
+    stored("cameraSize", "1280x720", ["640x480", "1280x720", "1920x1080"]),
+  );
+  useEffect(() => remember("cameraSize", cameraSize), [cameraSize]);
+  const [microphones, setMicrophones] = useState<{ id: string; name: string }[]>();
+  // undefined until the list arrives (then the first microphone); "" records no sound.
+  const [microphone, setMicrophone] = useState<string>();
   const [vcam, setVcam] = useState<{
     native_available?: boolean;
     native_camera?: boolean;
@@ -163,6 +172,13 @@ function App() {
       if (e.type === "cameras") {
         const list = e.cameras || [];
         setCameras(list);
+        const mics = e.microphones || [];
+        setMicrophones(mics);
+        setMicrophone((current) =>
+          current === "" || mics.some((m) => m.id === current)
+            ? current
+            : mics[0]?.id ?? "",
+        );
         setVcam({
           native_available: e.native_available,
           native_camera: e.native_camera,
@@ -417,7 +433,7 @@ function App() {
     }
     if (!source || !ready || (mode !== "live" && !target)) return;
     let destination: string | null = null;
-    if (mode !== "live") {
+    if (mode !== "live" || record) {
       // A fresh, readable name per job so the dialog never offers an existing file.
       const now = new Date();
       const two = (n: number) => String(n).padStart(2, "0");
@@ -425,9 +441,15 @@ function App() {
         `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-` +
         `${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
       const base = (name(target) || "yuz-atolyesi").replace(/\.[^.]+$/, "");
-      const file = `${base}-sonuc-${stamp}.${mode === "image" ? "png" : "mp4"}`;
+      const file =
+        mode === "live"
+          ? `canli-kayit-${stamp}.mp4`
+          : `${base}-sonuc-${stamp}.${mode === "image" ? "png" : "mp4"}`;
       destination = await save({
-        title: "Sonucun kaydedileceği konumu seçin",
+        title:
+          mode === "live"
+            ? "Canlı kaydın kaydedileceği konumu seçin"
+            : "Sonucun kaydedileceği konumu seçin",
         defaultPath: lastFolder.current
           ? `${lastFolder.current}${windows ? "\\" : "/"}${file}`
           : file,
@@ -450,6 +472,8 @@ function App() {
       source,
       target,
       output: destination,
+      microphone: mode === "live" && record && microphone ? microphone : null,
+      camera_size: cameraSize.split("x").map(Number),
       provider,
       many_faces: many,
       target_embeddings:
@@ -723,6 +747,54 @@ function App() {
                   >
                     <ScanFace size={14} /> Kadrajdaki kişileri bul
                   </button>
+                  <label className="select-label" htmlFor="camera-size">
+                    Görüntü kalitesi
+                  </label>
+                  <select
+                    id="camera-size"
+                    value={cameraSize}
+                    disabled={busy}
+                    onChange={(e) => setCameraSize(e.target.value)}
+                  >
+                    <option value="640x480">640 × 480 · en hızlı</option>
+                    <option value="1280x720">1280 × 720 · önerilen</option>
+                    <option value="1920x1080">1920 × 1080 · en net, daha yavaş</option>
+                  </select>
+                  <label className="toggle-row">
+                    <span>
+                      Canlı görüntüyü kaydet
+                      <small>
+                        Başlatınca kayıt yeri sorulur. Durdur'a bastığınızda
+                        kayıt, seçtiğiniz mikrofonun sesiyle MP4 olarak kapatılır.
+                      </small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={record}
+                      disabled={busy}
+                      onChange={(e) => setRecord(e.target.checked)}
+                    />
+                  </label>
+                  {record && (
+                    <>
+                      <label className="select-label" htmlFor="microphone">
+                        Ses
+                      </label>
+                      <select
+                        id="microphone"
+                        value={microphone ?? ""}
+                        disabled={busy}
+                        onChange={(e) => setMicrophone(e.target.value)}
+                      >
+                        {(microphones || []).map((m) => (
+                          <option value={m.id} key={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                        <option value="">Ses kaydetme</option>
+                      </select>
+                    </>
+                  )}
                   {(windows || macos) && (
                     <label className="toggle-row">
                       <span>

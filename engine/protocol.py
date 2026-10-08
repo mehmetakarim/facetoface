@@ -6,12 +6,16 @@ IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm'}
 EMBEDDING_SIZE = 512  # w600k_r50 output
 MAX_SELECTED_FACES = 8
+CAMERA_SIZES = [(640, 480), (1280, 720), (1920, 1080)]  # default: 1280x720
 
 
 def validate_camera(config):
     camera = config.get('camera', 0)
     if type(camera) is not int or not 0 <= camera <= 9:
         raise ValueError('Kamera numarası 0 ile 9 arasında olmalıdır.')
+    size = config.get('camera_size')
+    if size is not None and (type(size) is not list or tuple(size) not in CAMERA_SIZES):
+        raise ValueError('Geçersiz kamera çözünürlüğü.')
 
 
 def validate(config):
@@ -53,21 +57,31 @@ def validate(config):
         raise ValueError('Geçersiz sanal kamera ayarı.')
     if mode == 'live':
         validate_camera(config)
+        # Recording the live view is optional: no output means preview only.
+        if config.get('output') is not None:
+            validate_output(config, [source], {'.mp4'})
+        microphone = config.get('microphone')
+        if microphone is not None and (type(microphone) is not str or not 0 < len(microphone) <= 512):
+            raise ValueError('Geçersiz mikrofon seçimi. Mikrofon listesini yenileyin.')
     if mode in {'image', 'video'}:
         target = Path(config.get('target') or '')
         allowed = IMAGE_EXTENSIONS if mode == 'image' else VIDEO_EXTENSIONS
         if not target.is_file() or target.suffix.lower() not in allowed:
             raise ValueError('İşlemek istediğiniz fotoğrafı veya videoyu seçin.')
-        output = Path(config.get('output') or '')
-        if not str(config.get('output') or '').strip() or not output.parent.is_dir():
-            raise ValueError('Sonucun kaydedileceği geçerli bir konum seçin.')
-        if output.resolve() in {source.resolve(), target.resolve()}:
-            raise ValueError('Sonucu kaynak dosyanın üzerine kaydedemezsiniz. Farklı bir ad seçin.')
-        if output.exists():
-            raise ValueError('Bu adda bir dosya zaten var. Farklı bir ad seçin.')
-        if output.suffix.lower() not in ({'.png', '.jpg', '.jpeg'} if mode == 'image' else {'.mp4'}):
-            raise ValueError('Fotoğrafı PNG veya JPEG, videoyu MP4 olarak kaydedin.')
+        validate_output(config, [source, target], {'.png', '.jpg', '.jpeg'} if mode == 'image' else {'.mp4'})
     return config
+
+
+def validate_output(config, inputs, suffixes):
+    output = Path(config.get('output') or '')
+    if not str(config.get('output') or '').strip() or not output.parent.is_dir():
+        raise ValueError('Sonucun kaydedileceği geçerli bir konum seçin.')
+    if output.resolve() in {path.resolve() for path in inputs}:
+        raise ValueError('Sonucu kaynak dosyanın üzerine kaydedemezsiniz. Farklı bir ad seçin.')
+    if output.exists():
+        raise ValueError('Bu adda bir dosya zaten var. Farklı bir ad seçin.')
+    if output.suffix.lower() not in suffixes:
+        raise ValueError('Fotoğrafı PNG veya JPEG, videoyu MP4 olarak kaydedin.')
 
 
 def encode(event):
