@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from engine.people import assign, choose, group
+from engine.people import Tracker, assign, choose, group
 from engine.protocol import validate
 
 
@@ -49,6 +49,63 @@ class PeopleTests(unittest.TestCase):
         alice, bob = identity(1), identity(2)
         self.assertEqual(choose([identity(7, 0.7, bob)], [alice]), [])
         self.assertEqual(choose([], [alice]), [])
+
+
+class Face:
+    def __init__(self, bbox, embedding):
+        self.bbox, self.embedding = np.asarray(bbox, np.float32), embedding
+
+
+class TrackerTests(unittest.TestCase):
+    def setUp(self):
+        self.alice, self.bob = identity(1), identity(2)
+        self.calls = 0
+
+    def embed(self, face):
+        self.calls += 1
+        return face.embedding
+
+    def test_still_faces_are_recognised_once(self):
+        tracker = Tracker([self.alice], refresh=15)
+        for shift in range(10):  # both people drift a little each frame
+            faces = [Face([100 + shift, 100, 200 + shift, 220], identity(3, 0.5, self.bob)),
+                     Face([400 - shift, 100, 500 - shift, 220], identity(4, 0.5, self.alice))]
+            self.assertEqual(tracker.assign(faces, self.embed), [(1, 0)])
+        self.assertEqual(self.calls, 2)
+
+    def test_identity_is_rechecked_after_refresh_frames(self):
+        tracker = Tracker([self.alice], refresh=5)
+        face = Face([100, 100, 200, 220], identity(4, 0.5, self.alice))
+        for _ in range(13):
+            tracker.assign([face], self.embed)
+        self.assertEqual(self.calls, 3)  # frames 1, 7 and 13 recognise
+
+    def test_people_swapping_places_are_recognised_again(self):
+        tracker = Tracker([self.alice])
+        left, right = [100, 100, 200, 220], [400, 100, 500, 220]
+        alice, bob = identity(5, 0.5, self.alice), identity(6, 0.5, self.bob)
+        self.assertEqual(tracker.assign([Face(left, alice), Face(right, bob)], self.embed), [(0, 0)])
+        # An instant swap is a scene cut: the worker resets the tracker and all are recognised.
+        tracker.reset()
+        self.assertEqual(tracker.assign([Face(left, bob), Face(right, alice)], self.embed), [(1, 0)])
+
+    def test_crossing_faces_are_recognised_again(self):
+        tracker = Tracker([self.alice])
+        alice, bob = identity(9, 0.5, self.alice), identity(10, 0.5, self.bob)
+        tracker.assign([Face([100, 100, 200, 220], alice), Face([400, 100, 500, 220], bob)], self.embed)
+        # Mid-crossing both boxes overlap each other's previous track: ambiguous, so re-check.
+        before = self.calls
+        result = tracker.assign([Face([170, 100, 270, 220], bob), Face([230, 100, 330, 220], alice)], self.embed)
+        self.assertEqual(self.calls - before, 2)
+        self.assertEqual(result, [(1, 0)])
+
+    def test_a_newcomer_is_recognised_and_left_alone(self):
+        tracker = Tracker([self.alice])
+        alice = Face([100, 100, 200, 220], identity(7, 0.5, self.alice))
+        tracker.assign([alice], self.embed)
+        stranger = Face([400, 100, 500, 220], identity(8, 0.5, self.bob))
+        self.assertEqual(tracker.assign([alice, stranger], self.embed), [(0, 0)])
+        self.assertEqual(self.calls, 2)
 
 
 class SelectionProtocolTests(unittest.TestCase):

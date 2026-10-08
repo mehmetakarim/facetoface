@@ -376,16 +376,28 @@ def run(config):
         if ok:
             emit('frame', image=base64.b64encode(buf).decode('ascii'), **data)
 
+    # Follows recognised faces between frames so identities are not recomputed every frame.
+    from engine.people import Tracker
+    tracker = Tracker(targets) if targets is not None else None
+    previous_frame = None
+
     def transform(frame):
         # Only the source needs a recognition embedding. Target faces need landmarks.
         found = detect(frame)
         if config.get('many_faces', False):
             pairs = [(face, source) for face in found]
         elif targets is not None:
-            from engine.people import assign
-            for face in found:
+            # A scene cut can put another person where someone stood a frame ago.
+            nonlocal previous_frame
+            small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (32, 18), interpolation=cv2.INTER_AREA).astype(np.int16)
+            if previous_frame is not None and np.abs(small - previous_frame).mean() > 25:
+                tracker.reset()
+            previous_frame = small
+
+            def embed(face):
                 recognizer.get(frame, face)
-            pairs = [(found[i], person_sources[p]) for i, p in assign([f.normed_embedding for f in found], targets)]
+                return face.normed_embedding
+            pairs = [(found[i], person_sources[p]) for i, p in tracker.assign(found, embed)]
         else:
             pairs = [(face, source) for face in sorted(found, key=lambda f: f.bbox[0])[:1]]
         for target_face, face_source in pairs:
