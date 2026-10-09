@@ -34,6 +34,13 @@ def load_inference():
     prefix = 'engine._insightface_inference'
     _namespace(prefix, root)
     _namespace(prefix + '.app', root / 'app')
-    models = import_module(prefix + '.model_zoo')
+    models = import_module(prefix + '.model_zoo.model_zoo')
     common = import_module(prefix + '.app.common')
-    return models.get_model, common.Face
+    def get_model(path, **options):
+        # The public 0.7.3 get_model drops sess_options. Bypass that convenience
+        # function so thread limits and DirectML session settings reach ORT.
+        if not Path(path).is_file():
+            raise ValueError('Model dosyası bulunamadı.')
+        return models.ModelRouter(str(path)).get_model(**options)
+
+    return get_model, common.Face

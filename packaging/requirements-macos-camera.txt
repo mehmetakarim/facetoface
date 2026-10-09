@@ -2,3 +2,6 @@
 pyvirtualcam==0.15.0; sys_platform == 'darwin'
 
 pyobjc-framework-AVFoundation==12.2.2; sys_platform == 'darwin'
+
+# CoreML MLProgram and persistent compiled-model cache (macOS 13+).
+onnxruntime==1.23.2; sys_platform == 'darwin'

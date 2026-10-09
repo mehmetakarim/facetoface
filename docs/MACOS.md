@@ -73,3 +73,73 @@ seçti; izin kontrolünü geçip CPU yöntemiyle gerçek canlı görüntü üret
 onaylanmış değildir. CoreML hazırlığı bir dakikayı geçtiği için CPU ile sınandı.
 31 otomatik testten 25'i geçti, 6'sı koşullu olarak atlandı; TypeScript/Vite ve
 macOS Tauri debug app derlemesi başarılı oldu.
+
+## Apple hızlandırması ve disk kullanımı (9 Ekim 2026)
+
+macOS motoru artık `onnxruntime==1.23.2` kullanır; asgari macOS sürümü 13'tür.
+Eski `onnxruntime-silicon` aynı Python modülünü sağladığı için güncellemeden önce
+kaldırılmalıdır:
+
+```sh
+./venv/bin/python -m pip uninstall onnxruntime-silicon
+./venv/bin/python -m pip install -r packaging/requirements-macos-camera.txt
+```
+
+CoreML yüz değiştirme modelini `MLProgram` biçiminde, Apple işlem birimleri açık
+olarak çalıştırır. Derlenmiş model önbelleği `XDG_CACHE_HOME/yuz-atolyesi-coreml`
+altındadır; XDG tanımlı değilse `~/Library/Caches/yuz-atolyesi-coreml` kullanılır.
+`DLC_COREML_CACHE` bu konumu değiştirebilir. Modelin yolu, boyutu, değişiklik
+zamanları veya motor sürümü değiştiğinde ayrı bir önbellek oluşturulur.
+
+CoreML derlemesi yaklaşık 1 GB kalıcı önbelleğin yanında geçici disk alanı da
+kullanır. Geçici dosyalar uygulamanın işlem klasörüne alınır; normal çıkışta
+motor, iptal edildiğinde Tauri yöneticisi bu klasörü temizler. Önceki sürümlerde
+zorla durdurulan işlemler sistem geçici klasöründe derlenmiş parçalar bırakabiliyordu.
+Eski sürümlerden kalan dosyalar otomatik olarak topluca silinmez.
+
+M1 üzerindeki sentetik model ölçümü (kamera/algılama/önizleme dahil değildir):
+
+| Yöntem | Isınma sonrası kare başına süre |
+|---|---:|
+| Eski motor 1.16.3, CPU | 2,071 sn |
+| Motor 1.23.2, CoreML MLProgram | 0,259 sn |
+| Aynı CoreML önbelleğiyle tekrar | 0,262 sn |
+
+Son kontrollü denemede model açılışı ilk çalıştırmada 56,8 sn, önbellekle tekrar
+çalıştırmada 24,2 sn sürdü. İlk başarılı testte 24,1 sn de görüldü; açılış süresi
+cihazın disk ve bellek durumuna bağlıdır. Sentetik çıktının eski CPU çıktısına
+göre ortalama mutlak farkı `0,00000184`, en büyük farkı `0,00001485` idi.
+Bu karşılaştırma görsel kalite testinin yerine geçmez.
+
+Harici disk üzerinde etkin derleme önbelleği denemesi bu cihazda çok yavaştı;
+iç disk önbelleği korundu. Önbelleği taşımadan önce uygulamayı kapatın. Cihazda
+çok az disk alanı kaldığında CoreML derlemesi başarısız olabilir.
+
+Ölçümü tekrarlamak için (kamera açılmaz):
+
+```sh
+./venv/bin/python scripts/benchmark_macos_inference.py --provider coreml
+./venv/bin/python scripts/benchmark_macos_inference.py --provider cpu
+```
+
+Yapılandırma kaynağı: [ONNX Runtime CoreML belgeleri](https://onnxruntime.ai/docs/execution-providers/CoreML-ExecutionProvider.html).
+
+İlk uçtan uca testte yüz içeren 12 kare başarıyla işlendi ve video kodlandı.
+Isınma sonrasında kare aralıkları yaklaşık 0,22–0,32 sn idi; bu testte nesne
+koruması kapalıydı. FaceTime önizlemesi de CoreML ile açıldı; kadrajda yüz
+olmadığından o önizlemenin FPS değeri yüz değiştirme performansı sayılmadı.
+
+InsightFace 0.7.3'ün genel `get_model` işlevi `sess_options` değerini aktarmadığı
+için motor artık aynı kitaplığın `ModelRouter` sınıfını doğrudan kullanır. Böylece
+iki işlemci iş parçacığı sınırı, günlük seviyesi ve DirectML oturum ayarları
+gerçekten uygulanır. Windows üzerinde bu değişikliğin yerel testi ayrıca gerekir.
+
+CoreML başlamadan önce önbellek diskinde en az 3 GB boş alan kontrol edilir;
+yetersiz alanda derlemeye girmek yerine Türkçe açıklama gösterilir. Bu alt sınır,
+cihazın tüm bellek ve disk gereksinimleri için bir garanti değildir.
+
+Oturum ayarları düzeltildikten sonraki 12 karelik test de geçti; ilk iki karede
+uzun ısınma görüldü, sonraki kare aralıkları çoğunlukla 0,26–0,33 sn oldu.
+Bu nedenle kısa testin toplam ortalama FPS değeri ile ısınma sonrası hız aynı
+şey değildir; sabit bir canlı FPS garantisi verilmez. 35 otomatik testin 30'u
+geçti, Windows'a özgü 5 test macOS'ta atlandı.

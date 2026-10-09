@@ -12,6 +12,16 @@ import sys
 from engine.inference import load_inference
 get_model, Face = load_inference()
 assert callable(get_model)
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+sentinel = object()
+with tempfile.TemporaryDirectory() as folder:
+    path = Path(folder) / 'model.onnx'
+    path.write_bytes(b'test')
+    with patch.object(sys.modules['engine._insightface_inference.model_zoo.model_zoo'], 'ModelRouter') as router:
+        get_model(str(path), sess_options=sentinel, providers=['CPUExecutionProvider'])
+        router.return_value.get_model.assert_called_once_with(sess_options=sentinel, providers=['CPUExecutionProvider'])
 assert Face(bbox=[1, 2, 3, 4]).bbox == [1, 2, 3, 4]
 assert 'matplotlib.pyplot' not in sys.modules
 assert 'tkinter' not in sys.modules

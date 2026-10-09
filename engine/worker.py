@@ -117,6 +117,9 @@ def run(config):
     if config['mode'] == 'cameras':
         list_cameras()
         return
+    if sys.platform == 'darwin' and config.get('provider') == 'coreml':
+        from engine.apple_runtime import prepare_coreml_temp
+        prepare_coreml_temp()
     if sys.platform == 'win32' and config['mode'] == 'live' and config.get('virtual_camera'):
         from engine.virtualcam import installed as obs_installed, native_installed
         if not (native_installed() or obs_installed()):
@@ -211,7 +214,8 @@ def run(config):
     if provider == 'cpu':
         providers = ['CPUExecutionProvider']
     elif provider == 'coreml':
-        providers = ['CoreMLExecutionProvider', 'CPUExecutionProvider']
+        from engine.apple_runtime import coreml_options
+        providers = [('CoreMLExecutionProvider', coreml_options(model_path, ort.__version__)), 'CPUExecutionProvider']
     else:
         # DirectML rejects memory patterns and parallel execution. The detector stays
         # on CPU: det_10g's dynamic Reshape fails under DirectML 1.20.
@@ -222,7 +226,7 @@ def run(config):
         # Prefer the discrete GPU on hybrid laptops instead of adapter 0.
         providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance', 'device_filter': 'gpu'}),
                      'CPUExecutionProvider']
-    swapper = get_model(str(model_path), providers=providers, sess_options=swap_opts)
+    swapper = get_model(str(model_path.resolve()), providers=providers, sess_options=swap_opts)
     from engine.blend import Blender, Occluder
     occluder = None
     if config.get('occlusion', True):
