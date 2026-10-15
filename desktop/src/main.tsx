@@ -46,6 +46,8 @@ type EngineEvent = {
   native_camera?: boolean;
   obs_camera?: boolean;
   mac_bridge?: boolean;
+  mac_native?: boolean;
+  mac_native_available?: boolean;
   ffmpeg?: boolean;
 };
 const native = isTauri();
@@ -107,6 +109,8 @@ function App() {
     native_camera?: boolean;
     obs_camera?: boolean;
     mac_bridge?: boolean;
+    mac_native?: boolean;
+    mac_native_available?: boolean;
   }>();
   const [settingUp, setSettingUp] = useState(false);
   const [cameras, setCameras] = useState<{ index: number; name: string; id?: string }[]>();
@@ -159,6 +163,8 @@ function App() {
           native_camera: e.native_camera,
           obs_camera: e.obs_camera,
           mac_bridge: e.mac_bridge,
+          mac_native: e.mac_native,
+          mac_native_available: e.mac_native_available,
         });
         setCamera((current) =>
           list.length && !list.some((c) => c.index === current)
@@ -444,6 +450,14 @@ function App() {
       launch({ mode: "cameras" }, false, true);
     }
   }
+  async function openMacCameraManager() {
+    try {
+      await invoke("open_macos_camera_manager");
+      setMessage("Kamera kurulum penceresi açıldı. İşlem bitince kameraları yenileyin.");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
   async function stop() {
     try {
       await invoke("stop_job");
@@ -671,7 +685,9 @@ function App() {
                         Sanal kameraya gönder
                         <small>
                           {macos
-                            ? "Görüşme uygulamasında “OBS Virtual Camera”yı seçin. OBS’nin kamera uzantısının kurulmuş olması gerekir."
+                            ? vcam?.mac_native
+                              ? "Görüşme uygulamasında “Yüz Atölyesi Kamera”yı seçin. OBS gerekmez."
+                              : "Yerel kamera henüz etkin değil. Mevcut aktarım için OBS kamera uzantısı kullanılır."
                             : vcam?.native_camera
                             ? "WhatsApp, Teams, Zoom, Meet ve diğer uygulamalarda “Yüz Atölyesi Kamera”yı seçin. Kamera, canlı görüntü başlayınca listede görünür."
                             : vcam?.native_available
@@ -694,15 +710,19 @@ function App() {
                   )}
                   {macos && (
                     <details className="small-note">
-                      <summary>Mac’te sanal kamera nasıl kurulur?</summary>
-                      <ol>
-                        <li>macOS 13 veya üzerinde OBS Studio 30 ya da daha yeni bir sürümünü kurun.</li>
-                        <li>OBS’de “Sanal Kamerayı Başlat” düğmesine basın. macOS isterse Sistem Ayarları’ndan OBS kamera uzantısına izin verin.</li>
-                        <li>OBS’de sanal kamerayı durdurun ve OBS’yi kapatın.</li>
-                        <li>Burada “Sanal kameraya gönder” seçeneğini açıp canlı görüntüyü başlatın. Görüşme uygulamasında “OBS Virtual Camera”yı seçin.</li>
-                      </ol>
-                      <p>İlk kurulumdan sonra OBS’nin açık kalması gerekmez. Aktarım yalnızca canlı görüntü çalışırken yapılır.</p>
-                      {vcam && !vcam.mac_bridge && <p>Sanal kamera bileşeni eksik. macOS kurulum rehberindeki Python bağımlılığını yükleyin.</p>}
+                      <summary>Mac’te sanal kamera kurulumu</summary>
+                      {vcam?.mac_native ? (
+                        <p>Yerel kamera etkin. Sanal kameraya gönder seçeneğini açıp görüşme uygulamasında “Yüz Atölyesi Kamera”yı seçin.</p>
+                      ) : (
+                        <p>OBS’siz kullanım için imzalı Yüz Atölyesi Kamera paketini Uygulamalar klasöründen açıp kamerayı etkinleştirin. macOS’un uzantı iznini onayladıktan sonra bu listede kameraları yenileyin. İmzasız geliştirme paketi etkinleştirilemez.</p>
+                      )}
+                      {vcam?.mac_native_available && (
+                        <button className="text-button" disabled={busy || !native} onClick={openMacCameraManager}>
+                          Yerel kamera kurulumunu aç
+                        </button>
+                      )}
+                      {!vcam?.mac_native && <p>Yerel kamera kurulana kadar alternatif olarak OBS Studio 30 veya üzerini kullanabilirsiniz: OBS’de sanal kamerayı bir kez başlatıp macOS uzantı iznini verin, sonra OBS’yi kapatın. Görüşme uygulamasında “OBS Virtual Camera”yı seçin.</p>}
+                      {vcam && !vcam.mac_native && !vcam.mac_bridge && <p>Sanal kamera bileşeni eksik. Yerel kamera paketini veya macOS kurulum rehberindeki OBS köprüsünü kurun.</p>}
                     </details>
                   )}
                   {windows && vcam?.native_available && (
@@ -862,8 +882,8 @@ function App() {
                       <br />
                       Video araçları: {diagnostics.ffmpeg ? "hazır" : "eksik"}
                       {macos && (<>
-                        <br />Sanal kamera aktarım bileşeni: {diagnostics.mac_bridge ? "hazır" : "eksik"}
-                        <br />OBS uzantısı ve macOS izni canlı aktarım başlatılırken denetlenir.
+                        <br />Sanal kamera aktarım bileşeni: {diagnostics.mac_native ? "yerel kamera hazır" : diagnostics.mac_bridge ? "OBS köprüsü hazır" : "eksik"}
+                        {!diagnostics.mac_native && <><br />OBS uzantısı ve macOS izni canlı aktarım başlatılırken denetlenir.</>}
                       </>)}
                       {windows && (
                         <>

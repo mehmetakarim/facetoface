@@ -84,6 +84,26 @@ fn send(app: &tauri::AppHandle, id: &str, mut event: Value) {
     let _ = app.emit("engine-event", event);
 }
 #[tauri::command]
+fn open_macos_camera_manager() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = [
+            PathBuf::from("/Applications/YuzAtolyesiCamera.app"),
+            root().join("vcam/YuzAtolyesiCamera.app"),
+            root().join("native/macos-camera/build/YuzAtolyesiCamera.app"),
+        ];
+        let app = candidates.into_iter()
+            .find(|p| p.join("Contents/MacOS/YuzCameraManager").is_file())
+            .ok_or("Yerel kamera kurulum uygulaması bulunamadı.")?;
+        let status = Command::new("/usr/bin/open").arg(app).status()
+            .map_err(|e| format!("Kamera kurulum uygulaması açılamadı: {}", e))?;
+        if status.success() { Ok(()) } else { Err("Kamera kurulum uygulaması açılamadı.".into()) }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { Err("Bu işlem macOS içindir.".into()) }
+}
+
+#[tauri::command]
 fn environment() -> Value {
     let root = root();
     json!({"python":runtime(&root).0.exists(),"swap_model":root.join("models/inswapper_128.onnx").exists(),"root":root,"version":"0.2.0"})
@@ -400,7 +420,8 @@ fn main() {
             image_data,
             start_job,
             stop_job,
-            vcam_setup
+            vcam_setup,
+            open_macos_camera_manager
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

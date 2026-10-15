@@ -10,7 +10,7 @@ from engine import virtualcam
 class MacCameraTests(unittest.TestCase):
     def setUp(self):
         self.bridge = SimpleNamespace(Camera=Mock(), PixelFormat=SimpleNamespace(BGR='BGR'))
-        self.patches = [patch('platform.mac_ver', return_value=('14.0', '', 'arm64')),
+        self.patches = [patch('engine.macos_native.installed', return_value=False), patch('platform.mac_ver', return_value=('14.0', '', 'arm64')),
                         patch.dict(sys.modules, pyvirtualcam=self.bridge)]
         for item in self.patches:
             item.start()

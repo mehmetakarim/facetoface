@@ -170,8 +170,11 @@ def mac_bridge_available():
 
 
 def status():
+    from engine.macos_native import installed as mac_installed, manager_path
+    mac_native = sys.platform == 'darwin' and mac_installed()
     return {'native_available': native_available(), 'native_camera': native_installed(),
-            'obs_camera': installed(), 'mac_bridge': mac_bridge_available()}
+            'obs_camera': installed(), 'mac_bridge': mac_bridge_available(),
+            'mac_native': mac_native, 'mac_native_available': sys.platform == 'darwin' and manager_path() is not None}
 
 
 def native_installed():
@@ -303,6 +306,9 @@ class MacCamera:
 def open_camera(width, height):
     """Prefer the camera every app can see; fall back to OBS."""
     if sys.platform == 'darwin':
+        from engine.macos_native import installed as mac_installed, MacNativeCamera
+        if mac_installed():
+            return MacNativeCamera(width, height)
         return MacCamera(width, height)
     if native_installed():
         return WindowsCamera()

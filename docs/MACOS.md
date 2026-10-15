@@ -1,6 +1,8 @@
 # macOS sanal kamera
 
-Mac’te işlenen canlı görüntü OBS Virtual Camera üzerinden görüşme uygulamalarına aktarılır. Windows’a özgü “Yüz Atölyesi Kamera” sürücüsü Mac’e kurulmaz.
+OBS’den bağımsız **Yüz Atölyesi Kamera** uzantısının kaynak kodu ve uygulama bağlantısı hazırlandı. Henüz Apple Developer imzasıyla etkinleştirilip uçtan uca doğrulanmadı; mevcut kullanılabilir aktarım yolu OBS Virtual Camera’dır. Yerel uzantı etkinleştirildiğinde uygulama onu otomatik seçer. [Derleme ve kalan testler](../native/macos-camera/README.md).
+
+Aşağıdaki kurulum adımları OBS alternatifine aittir. Windows sürücüsü Mac’e kurulmaz.
 
 ## Gereksinimler ve ilk kurulum
 
